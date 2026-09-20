@@ -26,15 +26,8 @@ If some event information is not included in the description, the AI will return
 3. Use of AI
 Every event submitted by the user will be passed to the AI for analysis. The AI will analyse the event information together with the student's saved profile. The AI will identify useful details from the event description, such as the event category. It will then score how relevant the event is to the student.
 
-So the AI could receive:
-
-And then it will return a structured JSON response such as: 
-
 
 The AI will not directly decide whether the student should attend the event. The final recommendation will be determined by the program's business rules using the AI scores together with the student's workload. The program's logic will use the AI output together with the user's inputs to decide whether the recommendation is ATTEND, MAYBE or SKIP.
-
-How the AI would score:
-
 
 
 4. Business Rules
