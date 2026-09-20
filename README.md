@@ -1,63 +1,106 @@
-EventWise — AI-Assisted Student Event Decision System
+EventWise — AI-Assisted Student Event Decision System 
+
 1. Problem Statement and Target Users
-Students are often invited to career talks, workshops, networking sessions, club activities
-and other school events. With assignments, classes and other commitments, it can be
-difficult to decide whether an event is worth attending. Students may miss useful
-opportunities or spend time on events that are not very relevant to them.
-EventWise is a student event decision-making assistant that helps users decide whether
-to attend an event based on event details and their current situation. The target users are
-university and polytechnic students who regularly receive event invitations and need a
-quick way to judge whether an event is worth their time based on the student's own
-workload, interest level and other provided circumstances.
+Students are often invited to career talks, workshops, networking sessions, club activities and other school events. With assignments, classes and other commitments, it can be difficult to decide whether an event is worth attending. Students may miss useful opportunities or spend time on events that are not very relevant to them.
+
+EventWise is a student event decision-making assistant that helps users decide whether to attend an event based on event details and their current situation. The target users are university and polytechnic students who regularly receive event invitations and need a quick way to judge whether an event is worth their time based on the student's workload, field of study, interests and the event information provided.
+
 2. User Inputs
-The system will collect:
-• Event name
-• Event description
-• Event duration (minutes)
-• Travel time (minutes)
-• Interest level (1–5)
-• Current workload (Low / Medium / High)
-• Career relevance (Yes / No)
-• Additional information, such as event cost or networking opportunities (optional)
-• Post-Event Feedback (For events that the user attended, the system will allow the
-student to provide feedback after the event, including an overall rating (1–5), what went
-well, what was not useful, and whether they would attend a similar event again. (optional) )
-All inputs will be validated. Invalid values, such as a negative travel time or an interest
-level outside 1–5, will be rejected, and the user will be asked to enter the value again.
+To keep the application quick and easy to use, the user will not need to manually enter every detail about an event. When using the system for the first time, the student will provide a short profile containing their field of study and interests. This profile will be saved and reused for future event recommendations.
+
+Student’s Profile: (Example)
+Field of study and interests, e.g. “ICT student interested in cybersecurity and AI.” 
+What are you studying and what are you interested in? (Example question)
+
+Then, it will save into a JSON file. (profile.json) The next time the program runs, it can load the profile automatically. 
+For each event, the user will only need to provide:
+Event information – The user can paste the event name and description together. Information such as event type, duration and networking opportunities can be identified by the AI where available. 
+(Example: Google Cloud Career Workshop — Learn about cloud computing careers, speak with engineers and participate in a hands-on workshop. 2pm–5pm at SIT Punggol.)
+Current workload – 1. Low, 2. Medium or 3. High. (Numerical)
+
+This directly supports the required input validation in the I/O Manager. 
+For example:
+
+If some event information is not included in the description, the AI will return the missing field as unknown instead of making up information. All inputs will be validated. Invalid values, such as the workload outside of low, medium and high (1-3) will be rejected, and the user will be asked to enter the value again.
+
 3. Use of AI
-Every event record will be passed to the AI for analysis. The AI will read the event
-description together with the student's inputs and return a structured JSON response.
-The output will contain values such as career relevance, learning value, networking value,
-event category, and a short reason.
-Example:
-{ "career_relevance": 4, "learning_value": 5, "networking_value": 4, "event_category":
-"Career", "reason": "Useful for students interested in cybersecurity careers." }
-The AI is used to understand and score the event, but it will not make the final decision.
-The program's logic will use the AI output together with the user's inputs to decide whether
-the recommendation is ATTEND, MAYBE or SKIP.
-After an attended event, the AI will also analyse the student's post-event feedback to
-identify useful preferences or patterns.
+Every event submitted by the user will be passed to the AI for analysis. The AI will analyse the event information together with the student's saved profile. The AI will identify useful details from the event description, such as the event category. It will then score how relevant the event is to the student.
+
+So the AI could receive:
+
+And then it will return a structured JSON response such as: 
+
+
+The AI will not directly decide whether the student should attend the event. The final recommendation will be determined by the program's business rules using the AI scores together with the student's workload. The program's logic will use the AI output together with the user's inputs to decide whether the recommendation is ATTEND, MAYBE or SKIP.
+
+How the AI would score:
+
+
+
 4. Business Rules
-After the AI returns its analysis, the program will apply rules to produce the final
-recommendation. Possible rules include:
-• ATTEND if career relevance is at least 4, learning value is at least 4, workload is not
-High, and travel time is 60 minutes or less.
-• MAYBE if career relevance, learning value or networking value is high, but the student's
-workload is High.
-• SKIP if interest level is 2 or below and career relevance is 2 or below.
-• SKIP if travel time is more than 90 minutes and the event's overall value is low.
-• If the AI output is invalid or missing required fields, the system will reject the response
-and retry instead of crashing.
-• If a student has attended at least 2 similar events and their average rating is ≥4, increase
-consideration for similar future events. If at least 2 similar events have an average rating
-≤2, decrease consideration.
-The final result will show the recommendation and a short reason. The event details, AI
-analysis and final decision will then be saved in a JSON file so users can review previous
-recommendations.
-{
-Recommendation: ATTEND
-Reason: The event has high career relevance and learning value, and your current
-workload is manageable.
-}
+After receiving the AI analysis, the Logic Manager will use the AI scores together with the student's inputs to decide whether the recommendation should be ATTEND, MAYBE or SKIP. 
+The AI will give three main scores from 1 to 5:
+Career Relevance
+Learning Value
+Networking Value
+The program will calculate an overall event value using:
+Event Value = Career Relevance + Learning Value + Networking Value
+The minimum event value is 3 and the maximum is 15.
+Maximum
+Minimum
+5+5+5=15
+1+1+1 = 3
+
+The following rules will then be applied: 
+Rule
+Conditions
+Recommendation
+1
+Career Relevance ≥ 4 AND Learning Value ≥ 4 AND workload is Low or Medium 
+ATTEND
+2
+Event Value is 11–15 AND workload is High
+MAYBE
+3
+Event Value is 11–15 AND workload is Low or Medium
+ATTEND
+4
+Event Value is 7–10 AND workload is Low or Medium
+MAYBE 
+5
+Event Value is 7–10 AND workload is High 
+MAYBE
+6
+Event Value is 3–6
+SKIP
+
+Rule 1 is the multi-condition rule. It uses both career_relevance and learning_value, which are fields generated by the AI. For example, even if an event has good networking opportunities, an event that is highly relevant to the student's career and also provides strong learning opportunities will be prioritised when the student's workload is manageable. 
+*Rules are evaluated from top to bottom. Once a matching rule is found, the system returns that recommendation. 
+The final recommendation and a short reason will then be shown to the user. The event information, AI analysis and final recommendation will also be saved to a JSON file so that the user can view their previous event recommendations.
+
+
 5. Team Repository Details
-GitHub Repository URL: https://github.com/FoolishAmbition/INF1103-P8-G8
+GitHub Repository URL: https://github.com/FoolishAmbition/INF1103-P8-G8 
+
+Docker: 
+/v dockerfile save within container after every run 
+We will not be saving locally.
+
+Overall Flow:
+User 
+↓ 
+io_manager.py 
+↓ 
+collect profile collect event information collect workload validate input 
+↓ 
+ai_manager.py 
+↓ 
+send event + profile to AI receive structured JSON 
+↓ 
+logic_manager.py 
+↓ 
+calculate event value apply business rules 
+↓ 
+data_manager.py 
+↓ 
+save profile save event history 
