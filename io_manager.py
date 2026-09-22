@@ -64,3 +64,30 @@ def display_recommendation(recommendation, reason):
 def display_error(message):
     print("\nError:", message)
 
+def ask_to_use_saved_profile():
+
+    prompt = "\nDo you want to use the saved student profile? (yes/no): "
+    answer = input(prompt).strip().lower()
+
+    while answer not in ["yes", "no", "y", "n"]:
+        print("Please answer 'yes' or 'no'.")
+        answer = input(prompt).strip().lower()
+
+    return answer in ("yes", "y")
+
+def show_main_menu():
+    """placeholder for main menu for now, will be updated in the future"""
+    print("\n===== EventWise =====")
+    print("1. Evaluate a new event")
+    print("2. View event history")
+    print("3. Update profile")
+    print("4. Quit")
+
+def get_menu_choice():
+    """returns the user's chosen menu option either from 1 to 4"""
+    while True:
+        choice = input("Choose an option (1-4): ").strip()
+        if choice in ("1", "2", "3", "4"):
+            return int(choice)
+        else:
+            print("Invalid choice. Please enter a number between 1 and 4.")
