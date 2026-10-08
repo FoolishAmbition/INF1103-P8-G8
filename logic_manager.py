@@ -79,22 +79,67 @@ def generate_reason(recommendation, workload):
         reason = "The event is not highly relevant to you or your workload is too high to attend. It may be best to skip this event."
     return reason
 
+#give user an explanation of the ai score based on the career_relevance, learning_value, and networking_value scores
+def explain_ai_score(ai_result):
+    scores = [
+        ai_result["career_relevance"],
+        ai_result["learning_value"],
+        ai_result["networking_value"],
+    ]
+    categories = [
+        "Career Relevance",
+        "Learning Value",
+        "Networking Value",
+    ]
+    score_ratings = {}
+
+    for i, category in enumerate(categories):
+        score = scores[i]
+        if score >= 5:
+            rating = "Excellent"
+        elif score >= 4:
+            rating = "Good"
+        elif score >= 3:
+            rating = "Average"
+        elif score >= 2:
+            rating = "Below Average"
+        else:
+            rating = "Poor"
+
+        score_ratings[category] = {
+            "score": score,
+            "rating": rating
+        }
+    return score_ratings
+
+    
 #output to be generated
-def generate_summary(ai_result, workload):
+def display_results(result):
+    for key, value in result.items():
+        if key == "Score_Ratings":
+            print("Event Ratings:")
+            for category, details in value.items():
+                print(f"  {category}: Score = {details['score']}/5, Rating = {details['rating']}")
+        else:
+            print(f"{key}: {value}")
+
+
+def output(ai_result, workload):
+    if not validate_ai_result(ai_result):
+        return {"error": "Invalid AI result. Please ensure all scores are integers between 1 and 5."}
+    
+    score_ratings = explain_ai_score(ai_result)
     event_value = calculate_event_value(ai_result)
     priority = event_priority(event_value)
     recommendation = generate_recommendation(ai_result, workload)
     reason = generate_reason(recommendation, workload)
     ai_reasoning = get_ai_reasoning(ai_result)
 
-    if not validate_ai_result(ai_result):
-        return "Invalid AI result. Please check the input data."
-
-    summary = {
-        "Event_value": event_value,
+    output = {
+        "Score_Ratings": score_ratings,
         "Priority": priority,
         "Recommendation": recommendation,
         "Reason": reason,
-        "AI_Reasoning": ai_reasoning
+        "AI_Reasoning": ai_reasoning,
     }
-    return summary
+    return output
