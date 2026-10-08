@@ -1,0 +1,10 @@
+{
+    "name": "Test Student",
+    "course": "BEng ICT",
+    "year": 3,
+    "interests": [
+        "AI",
+        "Cybersecurity",
+        "Data Analytics"
+    ]
+}
