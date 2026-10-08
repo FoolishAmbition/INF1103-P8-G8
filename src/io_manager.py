@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 def get_student_profile():
     print("\n--- Student Profile ---")
 
@@ -59,5 +58,3 @@ def display_recommendation(recommendation, reason):
 
 def display_error(message):
     print("\nError:", message)
-=======
->>>>>>> origin/logic_manager
