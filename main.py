@@ -1,103 +1,14 @@
-import questionary
-from rich.console import Console
-from rich.panel import Panel
-
-import io_manager
-
-console = Console()
-
-profile = {
-    "name": "Andrew",
-    "age": "20",
-    "course": "Computer Science",
-    "email": "andrew@email.com",
-}
-
-
-def edit_profile():
-    while True:
-        choices = [
-            f"Name:   {profile['name']}",
-            f"Age:    {profile['age']}",
-            f"Course: {profile['course']}",
-            f"Email:  {profile['email']}",
-            "Save",
-            "Cancel",
-        ]
-
-        choice = questionary.select("Edit Profile", choices=choices).ask()
-
-        if choice.startswith("Name:"):
-            new_value = questionary.text(
-                "Enter your name:", default=profile["name"]
-            ).ask()
-
-            if new_value is not None:
-                profile["name"] = new_value
-
-        elif choice.startswith("Age:"):
-            new_value = questionary.text(
-                "Enter your age:", default=profile["age"]
-            ).ask()
-
-            if new_value is not None:
-                profile["age"] = new_value
-
-        elif choice.startswith("Course:"):
-            new_value = questionary.text(
-                "Enter your course:", default=profile["course"]
-            ).ask()
-
-            if new_value is not None:
-                profile["course"] = new_value
-
-        elif choice.startswith("Email:"):
-            new_value = questionary.text(
-                "Enter your email:", default=profile["email"]
-            ).ask()
-
-            if new_value is not None:
-                profile["email"] = new_value
-
-        elif choice == "Save":
-            print("\n✓ Profile saved!")
-            return
-
-        elif choice == "Cancel":
-            return
+from src.io_manager import (
+    get_main_menu_choice,
+)
 
 
 def main():
-    console.print(
-        Panel(
-            "[bold cyan]EVENT SUGGESTOR APP[/bold cyan]",
-            expand=False
-        )
-    )
+    status = None
+    is_error = False
+
     while True:
-        choice = questionary.select(
-            "What would you like to do?",
-            choices=[
-                "Profile",
-                "Add Event",
-                "Analyse Events",
-                "Exit"
-            ]
-        ).ask()
-
-        if choice == "Profile":
-            edit_profile()
-
-        elif choice == "Add Event":
-            print("\nAdd Event selected.")
-
-        elif choice == "Analyse Events":
-            print("\nAnalyse Events selected.")
-
-        elif choice == "Exit":
-            print("\nGoodbye!")
-            break
-
+        choice = get_main_menu_choice(status, is_error)
 
 if __name__ == "__main__":
     main()
