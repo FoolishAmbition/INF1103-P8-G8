@@ -8,12 +8,15 @@ import os
 
 # Folder where our JSON data files will be stored.
 # In Docker, this folder will be connected to a volume.
-DATA_DIR = "data"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# File used to store the student's profile.
+# Create the path to the data folder.
+DATA_DIR = os.path.join(BASE_DIR, "data")
+
+# Create the full paths to the JSON files.
 PROFILE_FILE = os.path.join(DATA_DIR, "profile.json")
 
-# File used to store all event records.
+
 EVENTS_FILE = os.path.join(DATA_DIR, "events.json")
 
 
@@ -140,3 +143,88 @@ def query_events(filter_function):
     #
     # This would return only events recommended as ATTEND.
     return [event for event in events if filter_function(event)]
+
+#test
+if __name__ == "__main__":
+    print("Data manager is working!")
+
+    ensure_data_directory()
+    print("Data directory checked.")
+
+    profile = load_profile()
+    print("Profile:", profile)
+
+    events = load_events()
+    print("Events:", events)
+
+
+
+# ============================================================
+# TEST DATA MANAGER
+# ============================================================
+
+if __name__ == "__main__":
+    print("Testing data manager...")
+
+    # --------------------------------------------------------
+    # TEST 1: Create and save a student profile
+    # --------------------------------------------------------
+
+    profile = {
+        "name": "Test Student",
+        "course": "BEng ICT",
+        "year": 3,
+        "interests": ["AI", "Cybersecurity", "Data Analytics"]
+    }
+
+    save_profile(profile)
+
+    print("Profile saved successfully.")
+
+    # --------------------------------------------------------
+    # TEST 2: Load the student profile
+    # --------------------------------------------------------
+
+    loaded_profile = load_profile()
+
+    print("Loaded profile:")
+    print(loaded_profile)
+
+    # --------------------------------------------------------
+    # TEST 3: Create and save an event
+    # --------------------------------------------------------
+
+    event = {
+        "io_input": {
+            "event_name": "AI Technology Meetup",
+            "description": "A meetup about AI and machine learning.",
+            "duration": 120
+        },
+
+        "ai_output": {
+            "event_category": "Tech Meetup",
+            "career_relevance": 5,
+            "learning_value": 5,
+            "networking_value": 4
+        },
+
+        "logic_output": {
+            "recommendation": "ATTEND",
+            "reason": "The event is highly relevant to the student's interests."
+        }
+    }
+
+    save_event(event)
+
+    print("Event saved successfully.")
+
+    # --------------------------------------------------------
+    # TEST 4: Load events
+    # --------------------------------------------------------
+
+    loaded_events = load_events()
+
+    print("Loaded events:")
+    print(loaded_events)
+
+    print("\nData manager test completed!")
