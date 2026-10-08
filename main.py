@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import questionary
 from rich.console import Console
 from rich.panel import Panel
@@ -106,3 +107,19 @@ def main():
 
 if __name__ == "__main__":
     main()
+=======
+import io_manager
+
+
+def main():
+    profile = io_manager.get_student_profile()
+    event_info = io_manager.get_event_information()
+    workload = io_manager.get_workload()
+
+    print("\n--- Test Output ---")
+    print("Profile:", profile)
+    print("Event Info:", event_info)
+    print("Workload:", workload)
+
+main()
+>>>>>>> origin/io_manager
