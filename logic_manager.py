@@ -6,7 +6,11 @@ def validate_ai_result(ai_result):
         "networking_value",
     ]
 
-
+    text_field = [
+        "event_category",
+        "ai-reasoning"
+    ]
+    #check if score is within minimum and maximum
     for scores in score_limit:
         if scores not in ai_result:
             return False
@@ -14,15 +18,13 @@ def validate_ai_result(ai_result):
             return False
         elif ai_result[scores] < 1 or ai_result[scores] > 5:
             return False
+    #validate AI text field
+    for text in text_field:
+        if text not in text_field:
+            return "Unknown"
+        elif type(ai_result[text]) is not str:
+            return "False"
     return True
-
-def get_ai_reasoning(ai_reasoning):
-    if "ai-reasoning" not in ai_reasoning:
-        return "No reasoning provided."
-    elif type(ai_reasoning["ai-reasoning"]) is not str:
-        return "Invalid reasoning format."
-    else:
-        return ai_reasoning["ai-reasoning"]
 
 
 #event value calculation based on the ai_result
@@ -52,15 +54,15 @@ def generate_recommendation(ai_result, workload):
     learning = ai_result["learning_value"]
     event_value = calculate_event_value(ai_result)
 
-    if career >= 4 and learning >= 4 and 1 <= workload <= 2:
+    if career >= 5 and learning >= 4 and 1 <= workload <= 2:
         recommendation = "Attend"
     elif event_value >= 11 and workload == 3:
         recommendation = "Maybe"
     elif event_value >= 11 and 1 <= workload <= 2:
         recommendation = "Attend"
-    elif 7 <= event_value <= 10 and 1 <= workload <= 2:
-        recommendation = "Maybe"
-    elif 7 <= event_value <= 10 and workload ==3:
+    elif 8 <= event_value <= 10 and 1 <= workload <= 2:
+        recommendation = "Attend"
+    elif 5 <= event_value <= 7 and workload == 3:
         recommendation = "Maybe"
     else:
         recommendation = "Skip"
@@ -72,9 +74,9 @@ def generate_reason(recommendation, workload):
         reason = "The event is highly relevant to your career and learning goals, and your workload is manageable."
     elif recommendation == "Maybe":
         if workload == 3:
-            reason = "The event has a solid potential depending on your focus, but your workload is heavy. Consider attending if possible."
+            reason = "The event offers valueble opportunities and its worthwhile, but your current workload may limit your ability to attend. Consider attending if possible."
         else:
-            reason = "The event has a solid potential depending on your focus, and your workload is manageable. You may consider attending."
+            reason = "The event offers valueble opportunities and its worthwhile. Since your workload is manageable, consider attending."
     else:
         reason = "The event is not highly relevant to you or your workload is too high to attend. It may be best to skip this event."
     return reason
@@ -133,9 +135,11 @@ def output(ai_result, workload):
     priority = event_priority(event_value)
     recommendation = generate_recommendation(ai_result, workload)
     reason = generate_reason(recommendation, workload)
-    ai_reasoning = get_ai_reasoning(ai_result)
+    event_category = ai_result["event_category"]
+    ai_reasoning = ai_result["ai-reasoning"]
 
     output = {
+        "Event Category": event_category,
         "Score_Ratings": score_ratings,
         "Priority": priority,
         "Recommendation": recommendation,
