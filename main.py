@@ -14,6 +14,10 @@ def main():
     while True:
         choice = get_main_menu_choice(status, is_error)
 
+        #reset
+        status = None
+        is_error = False
+
         if choice is None or choice == "Exit":
             display_message("Goodbye!")
             break
