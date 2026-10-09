@@ -1,5 +1,6 @@
 from rich import print
 from src.io_manager import (
+    display_error,
     get_main_menu_choice,
     display_message,
     edit_profile,
@@ -67,18 +68,23 @@ def main():
                 profile = updated
 
             case "Analyse New Events":
+                if profile == empty_profile(): 
+                    status = "Please create your profile first"
+                    is_error = True
+                    continue
+
                 event_info = get_event_information()
                 if event_info is None:
                     status = "Cancelled. No event was added."
                     continue
 
-                event_name, event_description = event_info
+                event_name, event_description, curr_workload = event_info
 
-                ai_res = analyze_event(profile, event_name, event_description)
+                ai_res = analyze_event(profile, event_name, event_description) 
 
                 # TODO: Remove hard coded WORKLOAD
-                event_summary = generate_summary(ai_res, 1)
-                event_summary |= {"event_name": event_name, "event_description":event_description}
+                event_summary = generate_summary(ai_res, curr_workload)
+                event_summary |= {"event_name": event_name, "event_description":event_description, "curr_workload": curr_workload}
                 display_event_result(event_summary, event_name, event_description)
                 events.append(event_summary);
                 

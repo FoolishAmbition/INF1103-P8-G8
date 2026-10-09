@@ -1,4 +1,5 @@
 import questionary
+from questionary import Choice
 
 from rich.console import Console
 from rich.panel import Panel
@@ -234,12 +235,80 @@ def edit_interests(interests):
 # 1.submit button
 # 2.have them display together instead of one by one
 # 3.erorr handling, like going back
-# 4.similar to edit profile where if all blank then cannot submit
 def get_event_information():
     status = None
     is_error = False
+    event_name = event_description = curr_workload = ""
 
-    refresh_screen()
+    while True:
+        refresh_screen(status, is_error)
+        status = None
+        is_error = False
+
+        # Edit profile menu
+        choice = questionary.select(
+            "Analyse Events",
+            choices=[
+                f"Event Name:        {event_name or '(not set)'}",
+                f"Event Description: {event_description or '(not set)'}",
+                f"Current workload:  {curr_workload or '(not set)'}",
+                "Submit",
+                "Cancel",
+            ],
+        ).ask()
+
+        # If cancels, return original
+        if choice is None or choice == "Cancel":
+            return
+
+        # Edit the field of study
+        if choice.startswith("Event Name"):
+            refresh_screen()
+
+            new_value = ask_text(
+                "Paste Your Event Name here:",
+                default=event_name,
+            )
+            if new_value is not None:
+                event_name = new_value
+
+        # Edit the field of study
+        elif choice.startswith("Event Description"):
+            refresh_screen()
+
+            new_value = ask_text(
+                "Paste Your Event Description here:",
+                default=event_description,
+            )
+            if new_value is not None:
+                event_description = new_value
+
+        # Edit the field of study
+        elif choice.startswith("Current workload"):
+            refresh_screen()
+
+            new_value = questionary.select(
+                "What is your current workload",
+                choices=[
+                    Choice(title="Low", value=1),
+                    Choice(title="Medium", value=2),
+                    Choice(title="High", value=3),
+                    Choice(title="Cancel", value=0),
+                ],
+            ).ask()
+
+            if new_value != 0:
+                curr_workload = new_value
+        # Save
+        elif choice == "Submit":
+
+            # Check if filled or empty
+            if not event_name.strip() or not event_description.strip():
+                status = "All the fields are required."
+                is_error = True
+                continue
+
+            return (event_name, event_description, curr_workload)
 
     # TODO: 1. ask for workload
     #      2. ask for event date and time using textual-datepicker
