@@ -6,6 +6,7 @@ from src.io_manager import (
     empty_profile,
     get_event_information,
     display_event_result,
+    display_all_events,
     
 )
 
@@ -84,7 +85,7 @@ def main():
             case "View Analysed Events":
                 # get events
                 # then i pass it to a function to display all events to console
-                return
+                display_all_events(events)
 
 if __name__ == "__main__":
     main()

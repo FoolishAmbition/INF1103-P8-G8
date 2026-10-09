@@ -241,7 +241,7 @@ def get_event_information():
 
     refresh_screen()
 
-    #TODO: 1. ask for workload
+    # TODO: 1. ask for workload
     #      2. ask for event date and time using textual-datepicker
 
     event_name = ask_text("Paste the event name")
@@ -276,17 +276,47 @@ def display_event_result(event_summary, event_name, event_description):
     console.rule("[bold cyan]Event[/bold cyan]", align="left", style="cyan")
     console.print(f"[bold]{event_name}[/bold]\n{event_description}\n")
 
-    console.rule(f"[{rec_style}]Priority: {priority} - Verdict: {recommendation}[/{rec_style}]", align="left", style=rec_style)
+    console.rule(
+        f"[{rec_style}]Priority: {priority} - Verdict: {recommendation}[/{rec_style}]",
+        align="left",
+        style=rec_style,
+    )
     console.print(f"{event_summary.get('reason', 'No reason provided.')}\n")
 
-    console.rule(f"[bold blue]{recommendation}[/bold blue]", align="left", style="blue")
+    console.rule(f"[bold blue]AI Reasoning[/bold blue]", align="left", style="blue")
     console.print(f"{event_summary.get("ai_reasoning", "No AI reasoning provided.")}\n")
 
     questionary.select("Return to the main menu", choices=["Close"]).ask()
 
+
 # TODO: Display multiple event with click
-def display_all_events():
-    return
+def display_all_events(events: list):
+    refresh_screen()
+
+    if not events:
+        display_message("No analysed events found.")
+        questionary.select("Return to the main menu", choices=["Close"]).ask()
+        return
+
+    table = Table(title="Analysed Events", show_lines=True)
+
+    table.add_column("Event", style="cyan", max_width=25)
+    table.add_column("Priority", style="yellow")
+    table.add_column("Recommendation", style="green")
+    table.add_column("Reason", style="white", max_width=50)
+
+    for event in events:
+        table.add_row(
+            str(event.get("event_name", "Unnamed event")),
+            str(event.get("priority", "Unknown")),
+            str(event.get("recommendation", "Unknown")),
+            str(event.get("reason", "No reason provided")),
+        )
+
+    console.print(table)
+
+    questionary.select("Return to the main menu", choices=["Close"]).ask()
+
 
 # -------------------------------------------------------------------------------------------------\
 # ------------------------------------- ALYSSIA CODE -----------------------------------------------
