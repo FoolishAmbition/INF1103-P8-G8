@@ -2,15 +2,9 @@ import questionary
 
 from rich.console import Console
 from rich.panel import Panel
+from rich.table import Table
 
 console = Console()
-
-MAIN_MENU_CHOICES = [
-    "Profile",
-    "Add Event",
-    "Analyse Events",
-    "Exit",
-]
 
 
 # ----------------------------------------------------------------------------------
@@ -51,12 +45,12 @@ def refresh_screen(status=None, is_error=False):
 
 
 # Display the main menu and return the option selected by the user
-def get_main_menu_choice(status=None, is_error=False):
+def get_main_menu_choice(main_menu_choice, status=None, is_error=False):
     refresh_screen(status, is_error)
 
     return questionary.select(
         "What would you like to do?",
-        choices=MAIN_MENU_CHOICES,
+        choices=main_menu_choice,
     ).ask()
 
 
@@ -102,8 +96,6 @@ def display_message(message):
 # ----------------------------------------------------------------------------------
 # FUNCTIONS
 # ----------------------------------------------------------------------------------
-
-
 def edit_profile(profile):
 
     # Work on a copy so that changes are only applied when the user saves
@@ -238,9 +230,69 @@ def edit_interests(interests):
             draft.remove(to_remove)
 
 
+# TODO:
+# 1.submit button
+# 2.have them display together instead of one by one
+# 3.erorr handling, like going back
+# 4.similar to edit profile where if all blank then cannot submit
+def get_event_information():
+    status = None
+    is_error = False
+
+    refresh_screen()
+
+    #TODO: 1. ask for workload
+    #      2. ask for event date and time using textual-datepicker
+
+    event_name = ask_text("Paste the event name")
+    event_description = ask_text("Paste the event description:")
+    current_workload = ask_text("What is your current workload:")
+
+    # Return None if the user cancels
+    if event_name is None or event_description is None:
+        return None
+
+    return (event_name, event_description)
+
+
+def recommendation_style(recommendation):
+    label = str(recommendation).upper()
+    if label == "ATTEND":
+        return "bold green"
+    if label == "MAYBE":
+        return "bold yellow"
+    if label == "SKIP":
+        return "bold red"
+    return "bold cyan"
+
+
+def display_event_result(event_summary, event_name, event_description):
+    refresh_screen()
+
+    priority = event_summary.get("priority", "No priority")
+    recommendation = event_summary.get("recommendation", "No recommendation")
+    rec_style = recommendation_style(recommendation)
+
+    console.rule("[bold cyan]Event[/bold cyan]", align="left", style="cyan")
+    console.print(f"[bold]{event_name}[/bold]\n{event_description}\n")
+
+    console.rule(f"[{rec_style}]Priority: {priority} - Verdict: {recommendation}[/{rec_style}]", align="left", style=rec_style)
+    console.print(f"{event_summary.get('reason', 'No reason provided.')}\n")
+
+    console.rule(f"[bold blue]{recommendation}[/bold blue]", align="left", style="blue")
+    console.print(f"{event_summary.get("ai_reasoning", "No AI reasoning provided.")}\n")
+
+    questionary.select("Return to the main menu", choices=["Close"]).ask()
+
+# TODO: Display multiple event with click
+def display_all_events():
+    return
+
 # -------------------------------------------------------------------------------------------------\
 # ------------------------------------- ALYSSIA CODE -----------------------------------------------
 # Alyssia code TODO: Refactor this code to use questionary
+
+"""
 def get_student_profile():
 
     print("\n--- Student Profile ---")
@@ -291,3 +343,4 @@ def display_recommendation(recommendation, reason):
     print("\n--- EventWise Recommendation ---")
     print("Recommendation:", recommendation)
     print("Reason:", reason)
+"""

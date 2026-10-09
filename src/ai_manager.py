@@ -9,6 +9,11 @@ from google.genai import types
 from google.genai import errors
 
 
+# REQUIRES YOUR OWN API KEY
+# USE GOOGLE AI STUDIO
+# CREATE A .env FILE, IN THERE WRITE
+# API_KEY={YOUR_API_KEY_HERE!!} NO CURLY BRACES AND REPLACE THE TEXT LOL
+
 # Load environment variables
 load_dotenv()
 API_KEY = os.getenv("API_KEY")
@@ -20,26 +25,32 @@ ANALYSIS_SCHEMA = {
     "properties": {
         "event_category": {
             "type": "STRING",
-            "description": "Short category of the event (e.g. 'Career Workshop'). Return 'unknown' if unclear."
+            "description": "Short category of the event (e.g. 'Career Workshop'). Return 'unknown' if unclear.",
         },
         "career_relevance": {
             "type": "INTEGER",
-            "description": "1: Not relevant at all, 2: Slightly, 3: Somewhat, 4: Highly, 5: Directly relevant."
+            "description": "1: Not relevant at all, 2: Slightly, 3: Somewhat, 4: Highly, 5: Directly relevant.",
         },
         "learning_value": {
             "type": "INTEGER",
-            "description": "1: Very little, 2: Low, 3: Moderate, 4: High, 5: Very high learning value."
+            "description": "1: Very little, 2: Low, 3: Moderate, 4: High, 5: Very high learning value.",
         },
         "networking_value": {
             "type": "INTEGER",
-            "description": "1: None, 2: Very limited, 3: Some, 4: Good, 5: Strong networking opportunity."
+            "description": "1: None, 2: Very limited, 3: Some, 4: Good, 5: Strong networking opportunity.",
         },
         "ai_reasoning": {
             "type": "STRING",
-            "description": "Concise 1-2 sentence explanation of how the event aligns with the student's profile and why these scores were given."
-        }
+            "description": "CONCISE 1-2 sentence explanation of how the event aligns with the student's profile and why these scores were given.",
+        },
     },
-    "required": ["event_category", "career_relevance", "learning_value", "networking_value", "ai_reasoning"]
+    "required": [
+        "event_category",
+        "career_relevance",
+        "learning_value",
+        "networking_value",
+        "ai_reasoning",
+    ],
 }
 
 SYSTEM_INSTRUCTION = (
@@ -53,25 +64,21 @@ SYSTEM_INSTRUCTION = (
 )
 
 
-# Currently using student profile and event_info as string
-
-def analyze_event(student_profile: dict, event_info: str):
-    # Send student profile and event information to Gemini AI
+def analyze_event(student_profile: dict, event_name, event_description):
+    # Send student profile and event information to Gemini AI Flash
     # Return dictionary with scores and category.
-    
+
     retries = 3
-    
     client = genai.Client(api_key=API_KEY)
 
-    # Current workload: {workload}/3
-    # (1 = Free, 2 = Manageable, 3 = Full)
     prompt = f"""
         STUDENT PROFILE:
-        Field of study: {student_profile["field_study"]}
-        Interests: {", ".join(student_profile["interest"])}
+        Field of study: {student_profile["field_of_study"]}
+        Interests: {", ".join(student_profile["interests"])}
         
-        EVENT INFORMATION:
-        {event_info}
+        EVENT NAME: {event_name}
+        EVENT DESCRIPTION:
+        {event_description}
 
         Analyse this event for this student.
     """
@@ -85,19 +92,17 @@ def analyze_event(student_profile: dict, event_info: str):
                     system_instruction=SYSTEM_INSTRUCTION,
                     response_mime_type="application/json",
                     response_schema=ANALYSIS_SCHEMA,
-                    temperature=0.2
+                    temperature=0.2,
                 ),
             )
 
             return json.loads(response.text)
 
         except errors.APIError as error:
-
             # Temporary errors - retry
             if error.code in [429, 503]:
-
                 if attempt < retries - 1:
-                    wait = 2 ** attempt
+                    wait = 2**attempt
                     print(
                         f"Gemini API error {error.code}. "
                         f"Retrying in {wait} seconds..."
@@ -114,18 +119,11 @@ def analyze_event(student_profile: dict, event_info: str):
             print(f"Unexpected error communicating with Gemini: {error}")
             break
 
-
     # Return fallback if all attempts fail
-    return {
-        "event_category": "unknown",
-        "career_relevance": 1,
-        "learning_value": 1,
-        "networking_value": 1,
-        "ai-reasoning": "unknown"
-    }
-            
-        
-        
+    return None
+
+
+"""
 if __name__ == "__main__":
     # 1. Provide sample input data    
     sample_profile = {
@@ -150,3 +148,4 @@ if __name__ == "__main__":
     expected_keys = {"event_category", "career_relevance", "learning_value", "networking_value"}
     assert expected_keys.issubset(result.keys()), f"Missing keys in result: {result}"
     print("\n✓ Schema test passed: All expected keys are present.")
+"""

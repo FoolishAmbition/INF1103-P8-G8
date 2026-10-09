@@ -1,11 +1,10 @@
-#check if the ai_result is valid
+# check if the ai_result is valid
 def validate_ai_result(ai_result):
     score_limit = [
         "career_relevance",
         "learning_value",
         "networking_value",
     ]
-
 
     for scores in score_limit:
         if scores not in ai_result:
@@ -16,16 +15,8 @@ def validate_ai_result(ai_result):
             return False
     return True
 
-def get_ai_reasoning(ai_reasoning):
-    if "ai-reasoning" not in ai_reasoning:
-        return "No reasoning provided."
-    elif type(ai_reasoning["ai-reasoning"]) is not str:
-        return "Invalid reasoning format."
-    else:
-        return ai_reasoning["ai-reasoning"]
 
-
-#event value calculation based on the ai_result
+# event value calculation based on the ai_result
 def calculate_event_value(ai_result):
     career_relevance = ai_result["career_relevance"]
     learning_value = ai_result["learning_value"]
@@ -35,7 +26,7 @@ def calculate_event_value(ai_result):
     return event_value
 
 
-#categorise event value
+# categorise event value
 def event_priority(event_value):
     if event_value >= 11:
         priority = "High"
@@ -46,7 +37,7 @@ def event_priority(event_value):
     return priority
 
 
-#generate recommendation based on the ai_result and workload
+# generate recommendation based on the ai_result and workload
 def generate_recommendation(ai_result, workload):
     career = ai_result["career_relevance"]
     learning = ai_result["learning_value"]
@@ -60,13 +51,14 @@ def generate_recommendation(ai_result, workload):
         recommendation = "Attend"
     elif 7 <= event_value <= 10 and 1 <= workload <= 2:
         recommendation = "Maybe"
-    elif 7 <= event_value <= 10 and workload ==3:
+    elif 7 <= event_value <= 10 and workload == 3:
         recommendation = "Maybe"
     else:
         recommendation = "Skip"
     return recommendation
 
-#main logic : generate reason based on the recommendation and workload
+
+# main logic : generate reason based on the recommendation and workload
 def generate_reason(recommendation, workload):
     if recommendation == "Attend":
         reason = "The event is highly relevant to your career and learning goals, and your workload is manageable."
@@ -79,22 +71,53 @@ def generate_reason(recommendation, workload):
         reason = "The event is not highly relevant to you or your workload is too high to attend. It may be best to skip this event."
     return reason
 
-#output to be generated
-def generate_summary(ai_result, workload):
+
+def get_ai_reasoning(ai_reasoning):
+    if "ai-reasoning" not in ai_reasoning:
+        return "No reasoning provided."
+    elif type(ai_reasoning["ai-reasoning"]) is not str:
+        return "Invalid reasoning format."
+    else:
+        return ai_reasoning["ai-reasoning"]
+
+
+# output to be generated
+def generate_summary(ai_result: dict, workload: int):
+    # validate
+    if not validate_ai_result(ai_result):
+        return "Invalid AI result. Please check the input data."
+
     event_value = calculate_event_value(ai_result)
     priority = event_priority(event_value)
     recommendation = generate_recommendation(ai_result, workload)
     reason = generate_reason(recommendation, workload)
-    ai_reasoning = get_ai_reasoning(ai_result)
-
-    if not validate_ai_result(ai_result):
-        return "Invalid AI result. Please check the input data."
 
     summary = {
-        "Event_value": event_value,
-        "Priority": priority,
-        "Recommendation": recommendation,
-        "Reason": reason,
-        "AI_Reasoning": ai_reasoning
+        "event_value": event_value,
+        "priority": priority,
+        "recommendation": recommendation,
+        "reason": reason,
     }
+    
+    summary |= ai_result
     return summary
+
+
+# TEST
+def main():
+    print(
+        generate_summary(
+            {
+                "event_category": "Technical Workshop",
+                "career_relevance": 5,
+                "learning_value": 5,
+                "networking_value": 4,
+                "ai_reasoning": "The event directly aligns with the student's ICT Software Engineering background and specific interest in AI by teaching practical production-ready RAG pipelines.",
+            },
+            1,
+        )
+    )
+
+
+if __name__ == "__main__":
+    main()
