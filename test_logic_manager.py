@@ -56,9 +56,9 @@ AI_RESPONSE_WEAK = {
     "networking_value": 1,
     "ai_reasoning": "Not relevant to the student's field or interests.",
 }
-
+# ---------------------------------------------------------------------------
 # These 3 malformed dictionaries simulate bad AI output 
-
+# ---------------------------------------------------------------------------
 # Error — missing required fields
 AI_RESPONSE_MISSING_FIELDS = {
     "event_category": "Unknown",
@@ -126,6 +126,73 @@ def run_all_tests():
 
     return failed == 0
 
+# ---------------------------------------------------------------------------
+# TESTS: validate_ai_result
+# ---------------------------------------------------------------------------
+
+def test_validate_ai_result_accepts_well_formed_response():
+    assert validate_ai_result(AI_RESPONSE_STRONG) is True
+
+
+def test_validate_ai_result_accepts_medium_scores():
+    assert validate_ai_result(AI_RESPONSE_MEDIUM) is True
+
+
+def test_validate_ai_result_rejects_missing_score_field():
+    assert validate_ai_result(AI_RESPONSE_MISSING_FIELDS) is False
+
+
+def test_validate_ai_result_rejects_score_above_maximum():
+    assert validate_ai_result(AI_RESPONSE_OUT_OF_RANGE) is False
+
+
+def test_validate_ai_result_rejects_non_integer_score():
+    assert validate_ai_result(AI_RESPONSE_WRONG_TYPE) is False
+
+
+def test_validate_ai_result_rejects_score_below_minimum():
+    bad = {
+        "event_category": "Workshop",
+        "career_relevance": 0,
+        "learning_value": 5,
+        "networking_value": 3,
+        "ai_reasoning": "Below minimum.",
+    }
+    assert validate_ai_result(bad) is False
+
+
+def test_validate_ai_result_rejects_boundary_value_six():
+    bad = {
+        "event_category": "Workshop",
+        "career_relevance": 6,
+        "learning_value": 5,
+        "networking_value": 3,
+        "ai_reasoning": "Just above range.",
+    }
+    assert validate_ai_result(bad) is False
+
+
+def test_validate_ai_result_accepts_boundary_values_one_and_five():
+    boundary = {
+        "event_category": "Workshop",
+        "career_relevance": 1,
+        "learning_value": 5,
+        "networking_value": 1,
+        "ai_reasoning": "Boundary values.",
+    }
+    assert validate_ai_result(boundary) is True
+
+
+def test_validate_ai_result_rejects_float_scores():
+    # type(x) is not int catches 3.0 as well as '3'
+    bad = {
+        "event_category": "Workshop",
+        "career_relevance": 3.0,
+        "learning_value": 5,
+        "networking_value": 3,
+        "ai_reasoning": "Float instead of int.",
+    }
+    assert validate_ai_result(bad) is False
 
 if __name__ == "__main__":
     ok = run_all_tests()
