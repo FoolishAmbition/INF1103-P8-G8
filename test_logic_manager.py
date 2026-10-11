@@ -323,6 +323,90 @@ def test_recommendation_rule1_requires_both_thresholds():
 
 
 # ---------------------------------------------------------------------------
+# TESTS: get_ai_reasoning
+# ---------------------------------------------------------------------------
+# NOTE: current implementation looks for the key "ai-reasoning" (hyphen),
+# but the AI schema actually returns "ai_reasoning" (underscore).
+# These tests document the ACTUAL current behaviour.
+
+def test_get_ai_reasoning_returns_default_for_underscore_key():
+    # Real AI responses use underscore → function returns default message
+    result = get_ai_reasoning(AI_RESPONSE_STRONG)
+    assert result == "No reasoning provided."
+
+
+def test_get_ai_reasoning_returns_text_for_hyphen_key():
+    # Function works as designed when the key uses a hyphen
+    payload = {"ai-reasoning": "The event matches the student's goals."}
+    assert get_ai_reasoning(payload) == "The event matches the student's goals."
+
+
+def test_get_ai_reasoning_rejects_non_string_hyphen_key():
+    payload = {"ai-reasoning": 12345}
+    assert get_ai_reasoning(payload) == "Invalid reasoning format."
+
+
+# ---------------------------------------------------------------------------
+# TESTS: generate_summary
+# ---------------------------------------------------------------------------
+
+def test_generate_summary_rejects_invalid_ai_result():
+    result = generate_summary(AI_RESPONSE_MISSING_FIELDS, 1)
+    assert isinstance(result, str)
+    assert "invalid" in result.lower()
+
+
+def test_generate_summary_returns_dict_for_valid_input():
+    result = generate_summary(AI_RESPONSE_STRONG, 1)
+    assert isinstance(result, dict)
+
+
+def test_generate_summary_contains_all_summary_fields():
+    result = generate_summary(AI_RESPONSE_STRONG, 1)
+    for key in ("event_value", "priority", "recommendation", "reason"):
+        assert key in result, f"missing summary key: {key}"
+
+
+def test_generate_summary_contains_all_ai_fields():
+    result = generate_summary(AI_RESPONSE_STRONG, 1)
+    for key in (
+        "event_category",
+        "career_relevance",
+        "learning_value",
+        "networking_value",
+        "ai_reasoning",
+    ):
+        assert key in result, f"missing AI key: {key}"
+
+
+def test_generate_summary_values_are_consistent_with_helpers():
+    result = generate_summary(AI_RESPONSE_STRONG, 1)
+    assert result["event_value"] == calculate_event_value(AI_RESPONSE_STRONG)
+    assert result["priority"] == event_priority(result["event_value"])
+    assert result["recommendation"] == generate_recommendation(AI_RESPONSE_STRONG, 1)
+    assert result["reason"] == generate_reason(result["recommendation"], 1)
+
+
+def test_generate_summary_priority_high_for_top_response():
+    result = generate_summary(AI_RESPONSE_STRONG, 1)
+    assert result["priority"] == "High"
+    assert result["recommendation"] == "Attend"
+
+
+def test_generate_summary_priority_low_for_weak_response():
+    result = generate_summary(AI_RESPONSE_WEAK, 1)
+    assert result["priority"] == "Low"
+    assert result["recommendation"] == "Skip"
+
+
+def test_generate_summary_recommendation_depends_on_workload():
+    # Same AI scores, different workload → different recommendation
+    low_workload = generate_summary(AI_RESPONSE_STRONG, 1)
+    high_workload = generate_summary(AI_RESPONSE_STRONG, 3)
+    assert low_workload["recommendation"] == "Attend"
+    assert high_workload["recommendation"] == "Maybe"
+
+# ---------------------------------------------------------------------------
 # MINIMAL TEST RUNNER (no pytest dependency required in Docker)
 # ---------------------------------------------------------------------------
 
