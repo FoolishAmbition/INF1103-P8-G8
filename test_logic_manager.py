@@ -53,8 +53,9 @@ AI_RESPONSE_WEAK = {
     "ai_reasoning": "Not relevant to the student's field or interests.",
 }
 # ---------------------------------------------------------------------------
-# These 3 malformed dictionaries simulate bad AI output 
+# Malformed dictionaries simulating bad AI output 
 # ---------------------------------------------------------------------------
+
 # Error — missing required fields
 AI_RESPONSE_MISSING_FIELDS = {
     "event_category": "Unknown",
@@ -81,46 +82,6 @@ AI_RESPONSE_WRONG_TYPE = {
     "networking_value": 3,
     "ai_reasoning": "Type mismatch.",
 }
-
-
-# ---------------------------------------------------------------------------
-# MINIMAL TEST RUNNER (no pytest dependency required in Docker)
-# ---------------------------------------------------------------------------
-
-def run_all_tests():
-    tests = [
-        (name, obj)
-        for name, obj in sorted(globals().items())
-        if name.startswith("test_") and callable(obj)
-    ]
-
-    passed = 0
-    failed = 0
-    failures = []
-
-    for name, func in tests:
-        try:
-            func()
-            print(f"PASS  {name}")
-            passed += 1
-        except AssertionError as exc:
-            print(f"FAIL  {name}  ->  {exc}")
-            failures.append((name, exc))
-            failed += 1
-        except Exception as exc:
-            print(f"ERROR {name}  ->  {type(exc).__name__}: {exc}")
-            failures.append((name, exc))
-            failed += 1
-
-    print()
-    print(f"{passed} passed, {failed} failed, {len(tests)} total")
-
-    if failures:
-        print("\nFailures:")
-        for name, exc in failures:
-            print(f"  - {name}: {exc}")
-
-    return failed == 0
 
 # ---------------------------------------------------------------------------
 # TESTS: validate_ai_result
@@ -189,6 +150,142 @@ def test_validate_ai_result_rejects_float_scores():
         "ai_reasoning": "Float instead of int.",
     }
     assert validate_ai_result(bad) is False
+
+# ---------------------------------------------------------------------------
+# TESTS: calculate_event_value
+# ---------------------------------------------------------------------------
+
+def test_calculate_event_value_sums_three_scores():
+    # 5 + 5 + 4 = 14
+    assert calculate_event_value(AI_RESPONSE_STRONG) == 14
+
+
+def test_calculate_event_value_medium_response():
+    # 3 + 3 + 3 = 9
+    assert calculate_event_value(AI_RESPONSE_MEDIUM) == 9
+
+
+def test_calculate_event_value_weak_response():
+    # 1 + 1 + 1 = 3
+    assert calculate_event_value(AI_RESPONSE_WEAK) == 3
+
+
+def test_calculate_event_value_minimum_possible():
+    # 1 + 1 + 1 = 3 (documented minimum in README)
+    minimum = {
+        "career_relevance": 1,
+        "learning_value": 1,
+        "networking_value": 1,
+    }
+    assert calculate_event_value(minimum) == 3
+
+
+def test_calculate_event_value_maximum_possible():
+    # 5 + 5 + 5 = 15 (documented maximum in README)
+    maximum = {
+        "career_relevance": 5,
+        "learning_value": 5,
+        "networking_value": 5,
+    }
+    assert calculate_event_value(maximum) == 15
+
+
+def test_calculate_event_value_ignores_extra_fields():
+    # event_category / ai_reasoning must NOT affect the sum
+    extended = {
+        "event_category": "Workshop",
+        "career_relevance": 4,
+        "learning_value": 3,
+        "networking_value": 2,
+        "ai_reasoning": "Some reason.",
+        "some_future_field": "ignored",
+    }
+    assert calculate_event_value(extended) == 9
+
+
+
+# ---------------------------------------------------------------------------
+# TESTS: event_priority
+# ---------------------------------------------------------------------------
+
+def test_event_priority_high_at_minimum_threshold():
+    # 11 is the first High value
+    assert event_priority(11) == "High"
+
+
+def test_event_priority_high_at_maximum_value():
+    # 15 is the maximum possible event value
+    assert event_priority(15) == "High"
+
+
+def test_event_priority_medium_at_lower_boundary():
+    # 7 is the first Medium value
+    assert event_priority(7) == "Medium"
+
+
+def test_event_priority_medium_at_upper_boundary():
+    # 10 is the last Medium value
+    assert event_priority(10) == "Medium"
+
+
+def test_event_priority_medium_in_middle():
+    assert event_priority(8) == "Medium"
+
+
+def test_event_priority_low_at_six():
+    # 6 is one below the Medium threshold
+    assert event_priority(6) == "Low"
+
+
+def test_event_priority_low_at_minimum_value():
+    # 3 is the documented minimum
+    assert event_priority(3) == "Low"
+
+
+def test_event_priority_boundaries_are_not_overlapping():
+    # Ensure 10 -> Medium and 11 -> High (the classic off-by-one test)
+    assert event_priority(10) == "Medium"
+    assert event_priority(11) == "High"
+
+# ---------------------------------------------------------------------------
+# MINIMAL TEST RUNNER (no pytest dependency required in Docker)
+# ---------------------------------------------------------------------------
+
+def run_all_tests():
+    tests = [
+        (name, obj)
+        for name, obj in sorted(globals().items())
+        if name.startswith("test_") and callable(obj)
+    ]
+
+    passed = 0
+    failed = 0
+    failures = []
+
+    for name, func in tests:
+        try:
+            func()
+            print(f"PASS  {name}")
+            passed += 1
+        except AssertionError as exc:
+            print(f"FAIL  {name}  ->  {exc}")
+            failures.append((name, exc))
+            failed += 1
+        except Exception as exc:
+            print(f"ERROR {name}  ->  {type(exc).__name__}: {exc}")
+            failures.append((name, exc))
+            failed += 1
+
+    print()
+    print(f"{passed} passed, {failed} failed, {len(tests)} total")
+
+    if failures:
+        print("\nFailures:")
+        for name, exc in failures:
+            print(f"  - {name}: {exc}")
+
+    return failed == 0
+
 
 if __name__ == "__main__":
     ok = run_all_tests()
