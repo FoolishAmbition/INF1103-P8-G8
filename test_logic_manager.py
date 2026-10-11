@@ -8,10 +8,6 @@ Run with:  python test_logic_manager.py
 """
 
 import sys
-import os
-
-# Ensuring src/ is importable when run from the project root directory
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
 from src.logic_manager import (
     validate_ai_result,
