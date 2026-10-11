@@ -8,8 +8,12 @@ Run with:  python test_logic_manager.py
 """
 
 import sys
+import os
 
-from src.logic_manager import (
+#Make `src/` importable regardless of where the script is run from (allows test run inside Docker container)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
+
+from logic_manager import (
     validate_ai_result,
     calculate_event_value,
     event_priority,
@@ -65,7 +69,7 @@ AI_RESPONSE_MISSING_FIELDS = {
     "ai_reasoning": "Incomplete response.",
 }
 
-# FeedingError — out of range
+# Error — out of range
 AI_RESPONSE_OUT_OF_RANGE = {
     "event_category": "Workshop",
     "career_relevance": 9,
@@ -246,6 +250,77 @@ def test_event_priority_boundaries_are_not_overlapping():
     # Ensure 10 -> Medium and 11 -> High (the classic off-by-one test)
     assert event_priority(10) == "Medium"
     assert event_priority(11) == "High"
+
+# ---------------------------------------------------------------------------
+# TESTS: generate_recommendation  (Rules 1-6 from README)
+# ---------------------------------------------------------------------------
+# Workload convention: 1 = Low, 2 = Medium, 3 = High
+# (matches io_manager.get_event_information's questionary values)
+
+def test_recommendation_rule1_top_scores_low_workload_attend():
+    # Rule 1: career >= 4 AND learning >= 4 AND workload in {1,2}
+    assert generate_recommendation(AI_RESPONSE_STRONG, 1) == "Attend"
+
+
+def test_recommendation_rule1_top_scores_medium_workload_attend():
+    assert generate_recommendation(AI_RESPONSE_STRONG, 2) == "Attend"
+
+
+def test_recommendation_rule2_high_value_high_workload_maybe():
+    # Rule 2: event_value >= 11 AND workload == 3
+    # STRONG: career=5, learning=5 → Rule 1 blocked because workload=3
+    # event_value = 14 → falls to Rule 2 → Maybe
+    assert generate_recommendation(AI_RESPONSE_STRONG, 3) == "Maybe"
+def test_recommendation_rule3_high_value_low_workload_attend():
+    # Rule 3: event_value >= 11 AND workload in {1,2}
+    # Use a case that does NOT satisfy Rule 1: career < 4
+    ai = {
+        "event_category": "Networking Night",
+        "career_relevance": 3,
+        "learning_value": 4,
+        "networking_value": 5,      # sum = 12
+        "ai_reasoning": "Strong networking, moderate career relevance.",
+    }
+    assert generate_recommendation(ai, 1) == "Attend"
+
+
+def test_recommendation_rule4_mid_value_low_workload_maybe():
+    # Rule 4: event_value 7-10 AND workload in {1,2}
+    # MEDIUM: 3+3+3 = 9
+    assert generate_recommendation(AI_RESPONSE_MEDIUM, 1) == "Maybe"
+
+
+def test_recommendation_rule5_mid_value_high_workload_maybe():
+    # Rule 5: event_value 7-10 AND workload == 3
+    assert generate_recommendation(AI_RESPONSE_MEDIUM, 3) == "Maybe"
+
+
+def test_recommendation_rule6_low_value_skip():
+    # Rule 6: event_value 3-6 → Skip, regardless of workload
+    # WEAK: 1+1+1 = 3
+    assert generate_recommendation(AI_RESPONSE_WEAK, 1) == "Skip"
+
+
+def test_recommendation_rule6_low_value_skip_medium_workload():
+    assert generate_recommendation(AI_RESPONSE_WEAK, 2) == "Skip"
+
+
+def test_recommendation_rule6_low_value_skip_high_workload():
+    assert generate_recommendation(AI_RESPONSE_WEAK, 3) == "Skip"
+
+
+def test_recommendation_rule1_requires_both_thresholds():
+    # career >= 4 but learning < 4 → Rule 1 must NOT fire.
+    # event_value = 4+3+4 = 11 → Rule 3 fires → Attend
+    ai = {
+        "event_category": "Workshop",
+        "career_relevance": 4,
+        "learning_value": 3,
+        "networking_value": 4,
+        "ai_reasoning": "High career, moderate learning.",
+    }
+    assert generate_recommendation(ai, 1) == "Attend"
+
 
 # ---------------------------------------------------------------------------
 # MINIMAL TEST RUNNER (no pytest dependency required in Docker)
