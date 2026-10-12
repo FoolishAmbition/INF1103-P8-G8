@@ -72,14 +72,13 @@ def generate_reason(recommendation, workload):
     return reason
 
 
-def get_ai_reasoning(ai_reasoning):
-    if "ai-reasoning" not in ai_reasoning:
+def get_ai_reasoning(ai_result):
+    if "ai_reasoning" not in ai_result:
         return "No reasoning provided."
-    elif type(ai_reasoning["ai-reasoning"]) is not str:
+    elif type(ai_result["ai_reasoning"]) is not str:
         return "Invalid reasoning format."
     else:
-        return ai_reasoning["ai-reasoning"]
-
+        return ai_result["ai_reasoning"]
 
 # output to be generated
 def generate_summary(ai_result: dict, workload: int):
