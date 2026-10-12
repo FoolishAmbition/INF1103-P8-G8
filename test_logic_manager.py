@@ -361,26 +361,30 @@ def test_generate_reason_returns_distinct_text_per_branch():
 # ---------------------------------------------------------------------------
 # TESTS: get_ai_reasoning
 # ---------------------------------------------------------------------------
-# NOTE: current implementation looks for the key "ai-reasoning" (hyphen),
-# but the AI schema actually returns "ai_reasoning" (underscore).
-# These tests document the ACTUAL current behaviour.
+# Bug fix in commit "fix get_ai_reasoning key mismatch found by test suite":
+# the function was originally looking for "ai-reasoning" (hyphen), but the
+# AI schema returns "ai_reasoning" (underscore). Tests updated to match the corrected behaviour.
 
-def test_get_ai_reasoning_returns_default_for_underscore_key():
-    # Real AI responses use underscore → function returns default message
+def test_get_ai_reasoning_returns_text_for_real_ai_response():
+    # Real AI responses use the underscore key → function returns the string
     result = get_ai_reasoning(AI_RESPONSE_STRONG)
-    assert result == "No reasoning provided."
+    assert result == AI_RESPONSE_STRONG["ai_reasoning"]
 
 
-def test_get_ai_reasoning_returns_text_for_hyphen_key():
-    # Function works as designed when the key uses a hyphen
-    payload = {"ai-reasoning": "The event matches the student's goals."}
-    assert get_ai_reasoning(payload) == "The event matches the student's goals."
+def test_get_ai_reasoning_returns_default_when_key_missing():
+    payload = {
+        "event_category": "Workshop",
+        "career_relevance": 4,
+        "learning_value": 4,
+        "networking_value": 4,
+        # ai_reasoning intentionally missing
+    }
+    assert get_ai_reasoning(payload) == "No reasoning provided."
 
 
-def test_get_ai_reasoning_rejects_non_string_hyphen_key():
-    payload = {"ai-reasoning": 12345}
+def test_get_ai_reasoning_rejects_non_string_value():
+    payload = {"ai_reasoning": 12345}
     assert get_ai_reasoning(payload) == "Invalid reasoning format."
-
 
 # ---------------------------------------------------------------------------
 # TESTS: generate_summary
