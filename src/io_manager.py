@@ -353,7 +353,7 @@ def display_event_result(event_summary, event_name, event_description):
     console.print(f"{event_summary.get('reason', 'No reason provided.')}\n")
 
     console.rule(f"[bold blue]AI Reasoning[/bold blue]", align="left", style="blue")
-    console.print(f"{event_summary.get("ai_reasoning", "No AI reasoning provided.")}\n")
+    console.print(f"{event_summary.get('ai_reasoning', 'No AI reasoning provided.')}\n")
 
     questionary.select("Return to the main menu", choices=["Close"]).ask()
 
