@@ -271,6 +271,7 @@ def test_recommendation_rule2_high_value_high_workload_maybe():
     # STRONG: career=5, learning=5 → Rule 1 blocked because workload=3
     # event_value = 14 → falls to Rule 2 → Maybe
     assert generate_recommendation(AI_RESPONSE_STRONG, 3) == "Maybe"
+
 def test_recommendation_rule3_high_value_low_workload_attend():
     # Rule 3: event_value >= 11 AND workload in {1,2}
     # Use a case that does NOT satisfy Rule 1: career < 4
@@ -320,6 +321,41 @@ def test_recommendation_rule1_requires_both_thresholds():
         "ai_reasoning": "High career, moderate learning.",
     }
     assert generate_recommendation(ai, 1) == "Attend"
+
+# ---------------------------------------------------------------------------
+# TESTS: generate_reason
+# ---------------------------------------------------------------------------
+
+def test_generate_reason_attend():
+    reason = generate_reason("Attend", 1)
+    assert isinstance(reason, str)
+    assert "highly relevant" in reason.lower()
+
+
+def test_generate_reason_maybe_with_high_workload_mentions_heavy():
+    reason = generate_reason("Maybe", 3)
+    assert isinstance(reason, str)
+    assert "heavy" in reason.lower()
+
+
+def test_generate_reason_maybe_with_low_workload_mentions_manageable():
+    reason = generate_reason("Maybe", 1)
+    assert isinstance(reason, str)
+    assert "manageable" in reason.lower()
+
+
+def test_generate_reason_skip():
+    reason = generate_reason("Skip", 1)
+    assert isinstance(reason, str)
+    assert "not highly relevant" in reason.lower()
+
+
+def test_generate_reason_returns_distinct_text_per_branch():
+    attend = generate_reason("Attend", 1)
+    maybe_heavy = generate_reason("Maybe", 3)
+    maybe_light = generate_reason("Maybe", 1)
+    skip = generate_reason("Skip", 1)
+    assert len({attend, maybe_heavy, maybe_light, skip}) == 4
 
 
 # ---------------------------------------------------------------------------
