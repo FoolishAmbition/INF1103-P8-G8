@@ -1,6 +1,4 @@
-from rich import print
 from src.io_manager import (
-    display_error,
     get_main_menu_choice,
     display_message,
     edit_profile,
@@ -32,6 +30,7 @@ MAIN_MENU_CHOICES = [
     "View Analysed Events",
     "Exit",
 ]
+
 
 def main():
     # profile
@@ -80,13 +79,20 @@ def main():
 
                 event_name, event_description, curr_workload = event_info
 
-                ai_res = analyze_event(profile, event_name, event_description) 
+                ai_result = analyze_event(profile, event_name, event_description)
+                # Checks if ai result gives none ---> meaning error
+                if ai_result is None:
+                    #TODO
+                    #1.Store all the previous inputs and give it to the same page so it can immediately submit again
 
-                # TODO: Remove hard coded WORKLOAD
-                event_summary = generate_summary(ai_res, curr_workload)
+                    status = "The event could not be analysed. Please try again."
+                    is_error = True
+                    continue
+
+                event_summary = generate_summary(ai_result, curr_workload)
                 event_summary |= {"event_name": event_name, "event_description":event_description, "curr_workload": curr_workload}
                 display_event_result(event_summary, event_name, event_description)
-                events.append(event_summary);
+                events.append(event_summary)
                 
             case "View Analysed Events":
                 # get events

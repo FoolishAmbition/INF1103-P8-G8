@@ -112,7 +112,7 @@ if __name__ == "__main__":
         },
     }
 
-    save_event(event)
+    save_events(event)
 
     print("Event saved successfully.")
 

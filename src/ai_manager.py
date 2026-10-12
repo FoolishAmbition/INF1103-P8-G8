@@ -58,7 +58,7 @@ SYSTEM_INSTRUCTION = (
     "Evaluate each event strictly against the student's profile. "
     "Consider the student's field of study and interests. "
     "Assign integer ratings from 1 to 5 for career_relevance, learning_value, "
-    "networking_value, and attendance_feasibility. "
+    "networking_value."
     "Do not assume or invent information that is not provided. "
     "If the event category cannot be determined, return 'unknown'."
 )
@@ -123,7 +123,6 @@ def analyze_event(student_profile: dict, event_name, event_description):
     return None
 
 
-"""
 if __name__ == "__main__":
     # 1. Provide sample input data    
     sample_profile = {
@@ -148,4 +147,3 @@ if __name__ == "__main__":
     expected_keys = {"event_category", "career_relevance", "learning_value", "networking_value"}
     assert expected_keys.issubset(result.keys()), f"Missing keys in result: {result}"
     print("\n✓ Schema test passed: All expected keys are present.")
-"""
