@@ -2,22 +2,26 @@ import json
 import time
 import os
 
+import httpx
 from dotenv import load_dotenv
 
 from google import genai
-from google.genai import types
-from google.genai import errors
+from google.genai import errors, types
 
 
 # REQUIRES YOUR OWN API KEY
 # USE GOOGLE AI STUDIO
 # CREATE A .env FILE, IN THERE WRITE
-# API_KEY={YOUR_API_KEY_HERE!!} NO CURLY BRACES AND REPLACE THE TEXT LOL
+# API_KEY=YOUR_API_KEY_HERE
 
-# Load environment variables
+# environment var
 load_dotenv()
 API_KEY = os.getenv("API_KEY")
 
+MODEL_NAME = "gemini-3.5-flash-lite"
+MAX_RETRIES = 3
+REQUEST_TIMEOUT_MS = 30000
+RETRY_CODES = {429, 500, 503, 504}  # Network errors and timeouts can retry till max
 
 # Define the expected JSON output
 ANALYSIS_SCHEMA = {
@@ -64,18 +68,12 @@ SYSTEM_INSTRUCTION = (
 )
 
 
-def analyze_event(student_profile: dict, event_name, event_description):
-    # Send student profile and event information to Gemini AI Flash
-    # Return dictionary with scores and category.
-
-    retries = 3
-    client = genai.Client(api_key=API_KEY)
-
-    prompt = f"""
+def build_prompt(student_profile, event_name, event_description):
+    return f"""
         STUDENT PROFILE:
         Field of study: {student_profile["field_of_study"]}
         Interests: {", ".join(student_profile["interests"])}
-        
+
         EVENT NAME: {event_name}
         EVENT DESCRIPTION:
         {event_description}
@@ -83,67 +81,115 @@ def analyze_event(student_profile: dict, event_name, event_description):
         Analyse this event for this student.
     """
 
-    for attempt in range(retries):
-        try:
-            response = client.models.generate_content(
-                model="gemini-3.5-flash-lite",
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_INSTRUCTION,
-                    response_mime_type="application/json",
-                    response_schema=ANALYSIS_SCHEMA,
-                    temperature=0.2,
-                ),
-            )
 
-            return json.loads(response.text)
+def handle_api_error(error):
+    # Prints a helpful message for an API error.
+    # Returns True if it is worth trying again, False if retrying is pointless.
+    message = (error.message or "").lower()
+
+    # Invalid api key
+    if error.code in [401, 403] or (error.code == 400 and "api key" in message):
+        print("Authentication failed: your API key is invalid or not allowed.")
+        return False
+
+    # Wrong ai model
+    if error.code == 404:
+        print(f"AI Model '{MODEL_NAME}' was not found. Check the model name.")
+        return False
+
+    # Temporary errors, so trying again may work
+    if error.code == 429:
+        print("Rate limit reached (too many requests).")
+        return True
+    if error.code in RETRY_CODES:
+        print(f"Server problem (error {error.code}).")
+        return True
+
+    # Any other error that retrying won't fix
+    print(f"Gemini API error {error.code}: {error.message}")
+    return False
+
+
+def wait_before_retry(attempt):
+    # wait 1,5,25 seconds and power of 5 so on, but cannot exceed 60s
+    if attempt < MAX_RETRIES - 1:
+        wait = min(5**attempt,  60)
+        print(f"Retrying in {wait} seconds... (attempt {attempt + 1}/{MAX_RETRIES})")
+        time.sleep(wait)
+
+
+def request_analysis(client, prompt):
+    # Makes ONE request to Gemini and returns the reply as a dictionary.
+    # Errors are NOT handled here, analyze_event deals with them.
+    response = client.models.generate_content(
+        model=MODEL_NAME,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=SYSTEM_INSTRUCTION,
+            response_mime_type="application/json",
+            response_schema=ANALYSIS_SCHEMA,
+            temperature=0.2,
+        ),
+    )
+    return json.loads(response.text)
+
+
+def analyze_event(student_profile: dict, event_name, event_description):
+    # Send student profile and event information to Gemini AI Flash
+    # Return dictionary with scores and category.
+
+    if not API_KEY:
+        print("Error: API_KEY not found. Make sure your .env file has API_KEY=your_key")
+        return None
+
+    client = genai.Client(
+        api_key=API_KEY,
+        http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS),  # give up after REQUEST_TIMEOUT_MS
+    )
+
+    prompt = build_prompt(student_profile, event_name, event_description)
+
+    for attempt in range(MAX_RETRIES):
+        try:
+            return request_analysis(client, prompt)
 
         except errors.APIError as error:
-            # Temporary errors - retry
-            if error.code in [429, 503]:
-                if attempt < retries - 1:
-                    wait = 2**attempt
-                    print(
-                        f"Gemini API error {error.code}. "
-                        f"Retrying in {wait} seconds..."
-                    )
+            should_retry = handle_api_error(error)
+            if not should_retry:
+                return None
 
-                    time.sleep(wait)
-                    continue
+        except httpx.TransportError:
+            # no internet, no connection, timeouts
+            print("Network problem: could not reach the Gemini API.")
 
-            # Non-retryable API error
-            print(f"Gemini API error {error.code}: {error.message}")
-            break
+        except (json.JSONDecodeError, TypeError):
+            # empty, blocked, invalid JSON
+            print("Gemini sent back an empty or invalid response.")
 
-        except Exception as error:
-            print(f"Unexpected error communicating with Gemini: {error}")
-            break
+        # attempt worth retry
+        wait_before_retry(attempt)
 
-    # Return fallback if all attempts fail
+    print("Several failed attempts. Error not could not be resolved")
     return None
 
 
 if __name__ == "__main__":
-    # 1. Provide sample input data    
     sample_profile = {
-        "field_study": "Computer Science",
-        "interest": ["Backend Engineering", "Cloud Computing", "Summer software internships"]
+        "field_of_study": "Computer Science",
+        "interests": [
+            "Backend Engineering",
+            "Cloud Computing",
+            "Summer software internships",
+        ],
     }
-    
-    sample_event = (
-        "Distributed Systems Meetup: Senior engineers discuss building high-throughput "
-        "microservices with Go and Kubernetes. Q&A and networking session afterwards."
-    )
-
-    # 2. Run the function (pass your API key string here if not set in your environment)
-    # result = analyze_event(sample_profile, sample_event, api_key="YOUR_GEMINI_API_KEY")
-    result = analyze_event(sample_profile, sample_event)
-
-    # 3. Print the output
-    print("Function Output:")
-    print(json.dumps(result, indent=2))
-
-    # 4. Basic sanity check assertions
-    expected_keys = {"event_category", "career_relevance", "learning_value", "networking_value"}
-    assert expected_keys.issubset(result.keys()), f"Missing keys in result: {result}"
-    print("\n✓ Schema test passed: All expected keys are present.")
+ 
+    sample_name = "Distributed Systems Meetup"
+    sample_description = ("Senior engineers discuss building high-throughput microservices with Go and Kubernetes. Q&A and networking session afterwards.")
+ 
+    result = analyze_event(sample_profile, sample_name, sample_description)
+ 
+    if result is None:
+        print("AI Analysis failed.")
+    else:
+        print("Function Output:")
+        print(json.dumps(result, indent=2))
