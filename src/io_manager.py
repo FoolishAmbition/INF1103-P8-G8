@@ -1,9 +1,11 @@
 import questionary
-from questionary import Choice
+from questionary import Choice, form
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+
+from src.logic_manager import (format_scores)
 
 console = Console()
 
@@ -231,14 +233,13 @@ def edit_interests(interests):
             draft.remove(to_remove)
 
 
-# TODO:
-# 1.submit button
-# 2.have them display together instead of one by one
-# 3.erorr handling, like going back
-def get_event_information():
+def get_event_information(previous=None):
     status = None
     is_error = False
-    event_name = event_description = curr_workload = ""
+    if previous:
+        event_name, event_description, workload = previous
+    else:
+        event_name = event_description = workload = ""
 
     while True:
         refresh_screen(status, is_error)
@@ -251,7 +252,7 @@ def get_event_information():
             choices=[
                 f"Event Name:        {event_name or '(not set)'}",
                 f"Event Description: {event_description or '(not set)'}",
-                f"Current workload:  {curr_workload or '(not set)'}",
+                f"Current workload:  {workload or '(not set)'}",
                 "Submit",
                 "Cancel",
             ],
@@ -261,7 +262,7 @@ def get_event_information():
         if choice is None or choice == "Cancel":
             return
 
-        # Edit the field of study
+        # Edit event name
         if choice.startswith("Event Name"):
             refresh_screen()
 
@@ -272,7 +273,7 @@ def get_event_information():
             if new_value is not None:
                 event_name = new_value
 
-        # Edit the field of study
+        # Edit event description
         elif choice.startswith("Event Description"):
             refresh_screen()
 
@@ -283,22 +284,22 @@ def get_event_information():
             if new_value is not None:
                 event_description = new_value
 
-        # Edit the field of study
+        # Edit the workload
         elif choice.startswith("Current workload"):
             refresh_screen()
 
             new_value = questionary.select(
                 "What is your current workload",
                 choices=[
-                    Choice(title="Low", value=1),
-                    Choice(title="Medium", value=2),
-                    Choice(title="High", value=3),
+                    "Low",
+                    "Medium",
+                    "High",
                     Choice(title="Cancel", value=0),
                 ],
             ).ask()
 
             if new_value != 0:
-                curr_workload = new_value
+                workload = new_value
         # Save
         elif choice == "Submit":
 
@@ -308,67 +309,91 @@ def get_event_information():
                 is_error = True
                 continue
 
-            return (event_name, event_description, curr_workload)
+            return (event_name, event_description, workload)
 
 
-def recommendation_style(recommendation):
-    label = str(recommendation).upper()
-    if label == "ATTEND":
-        return "bold green"
-    if label == "MAYBE":
-        return "bold yellow"
-    if label == "SKIP":
-        return "bold red"
-    return "bold cyan"
-
-
-def display_event_result(event_summary, event_name, event_description):
+def display_event_result(event_summary, back_label="Return to the main menu"):
     refresh_screen()
 
+    # Event Info
     priority = event_summary.get("priority", "No priority")
     recommendation = event_summary.get("recommendation", "No recommendation")
-    rec_style = recommendation_style(recommendation)
+    rec_style = {
+        "ATTEND": "bold green",
+        "MAYBE": "bold yellow",
+        "SKIP": "bold red"
+    }.get(str(recommendation).upper(), "bold cyan")
 
     console.rule("[bold cyan]Event[/bold cyan]", align="left", style="cyan")
-    console.print(f"[bold]{event_name}[/bold]\n{event_description}\n")
+    console.print(f"[bold]{event_summary.get("event_name")}[/bold]\n{event_summary.get("event_description")}\n")
 
+    # Score breakdown
+    format_dict = format_scores(event_summary["career_relevance"], event_summary["learning_value"], event_summary["networking_value"])
+    console.rule(f"[bold magenta]Score Breakdown[/bold magenta]", align="left", style="magenta")
+    console.print(f"Career Relevance: {format_dict["career_relevance"]}  •  Learning Value: {format_dict["learning_value"]}  •  Networking Value: {format_dict["networking_value"]}\n")
+
+    # Priority and Recommendation
     console.rule(
-        f"[{rec_style}]Priority: {priority} - Verdict: {recommendation}[/{rec_style}]",
+        f"[{rec_style}]Priority: {priority} - Recommendation: {recommendation}[/{rec_style}]",
         align="left",
         style=rec_style,
     )
     console.print(f"{event_summary.get('reason', 'No reason provided.')}\n")
 
+    # AI reasoning
     console.rule(f"[bold blue]AI Reasoning[/bold blue]", align="left", style="blue")
     console.print(f"{event_summary.get('ai_reasoning', 'No AI reasoning provided.')}\n")
 
-    questionary.select("Return to the main menu", choices=["Close"]).ask()
+    questionary.select(back_label, choices=["Back"]).ask()
 
 
-# TODO: Display multiple event with click
 def display_all_events(events: list):
-    refresh_screen()
-
     if not events:
+        refresh_screen()
         display_message("No analysed events found.")
         questionary.select("Return to the main menu", choices=["Close"]).ask()
         return
 
-    table = Table(title="Analysed Events", show_lines=True)
+    while True:
+        refresh_screen()
 
-    table.add_column("Event", style="cyan", max_width=25)
-    table.add_column("Priority", style="yellow")
-    table.add_column("Recommendation", style="green")
-    table.add_column("Reason", style="white", max_width=50)
+        table = Table(title="Analysed Events", show_lines=True)
 
-    for event in events:
-        table.add_row(
-            str(event.get("event_name", "Unnamed event")),
-            str(event.get("priority", "Unknown")),
-            str(event.get("recommendation", "Unknown")),
-            str(event.get("reason", "No reason provided")),
-        )
+        table.add_column("No.", style="cyan")
+        table.add_column("Event", style="cyan", max_width=25)
+        table.add_column("Priority", style="yellow")
+        table.add_column("Recommendation", style="green")
+        table.add_column("Reason", style="white", max_width=50)
+        table.add_column("Career", style="white")
+        table.add_column("Learning", style="white")
+        table.add_column("Networking", style="white")
 
-    console.print(table)
+        for i, event in enumerate(events, start=1):
+            table.add_row(
+                str(i),
+                str(event.get("event_name", "Unnamed event")),
+                str(event.get("priority", "Unknown")),
+                str(event.get("recommendation", "Unknown")),
+                str(event.get("reason", "No reason provided")),
+                str(event.get("career_relevance", 0)),
+                str(event.get("learning_value", 0)),
+                str(event.get("networking_value", 0)),
+            )
 
-    questionary.select("Return to the main menu", choices=["Close"]).ask()
+        console.print(table)
+
+        choices = [
+            questionary.Choice(
+                title=f"{i}. {event.get('event_name', 'Unnamed event')}",
+                value=event,
+            )
+            for i, event in enumerate(events, start=1)
+        ]
+        choices.append("Back")
+
+        selected = questionary.select("Select an event to view", choices=choices).ask()
+
+        if selected is None or selected == "Back":
+            return
+
+        display_event_result(selected, back_label="Return to event table")

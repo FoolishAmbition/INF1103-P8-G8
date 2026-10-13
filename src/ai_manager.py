@@ -83,31 +83,24 @@ def build_prompt(student_profile, event_name, event_description):
 
 
 def handle_api_error(error):
-    # Prints a helpful message for an API error.
-    # Returns True if it is worth trying again, False if retrying is pointless.
     message = (error.message or "").lower()
 
     # Invalid api key
     if error.code in [401, 403] or (error.code == 400 and "api key" in message):
-        print("Authentication failed: your API key is invalid or not allowed.")
-        return False
+        return "Authentication failed: your API key is invalid or not allowed.", False
 
     # Wrong ai model
     if error.code == 404:
-        print(f"AI Model '{MODEL_NAME}' was not found. Check the model name.")
-        return False
+        return f"Model '{MODEL_NAME}' was not found. Check the model name.", False
 
     # Temporary errors, so trying again may work
     if error.code == 429:
-        print("Rate limit reached (too many requests).")
-        return True
+        return "Rate limit reached (too many requests). Wait a moment and try again.", True
     if error.code in RETRY_CODES:
-        print(f"Server problem (error {error.code}).")
-        return True
+        return f"The Gemini server had a problem (error {error.code}).", True
 
-    # Any other error that retrying won't fix
-    print(f"Gemini API error {error.code}: {error.message}")
-    return False
+    # other error that retrying won't fix
+    return f"Gemini API error {error.code}: {error.message}", False
 
 
 def wait_before_retry(attempt):
@@ -135,12 +128,14 @@ def request_analysis(client, prompt):
 
 
 def analyze_event(student_profile: dict, event_name, event_description):
-    # Send student profile and event information to Gemini AI Flash
-    # Return dictionary with scores and category.
+    """
+    Send student profile and event information to Gemini to analyze
+    return:
+    response dictionary, error
+    """
 
     if not API_KEY:
-        print("Error: API_KEY not found. Make sure your .env file has API_KEY=your_key")
-        return None
+        return None, "API_KEY not found. Make sure your .env file has API_KEY=your_key"
 
     client = genai.Client(
         api_key=API_KEY,
@@ -149,28 +144,29 @@ def analyze_event(student_profile: dict, event_name, event_description):
 
     prompt = build_prompt(student_profile, event_name, event_description)
 
+    error_message = ""
+
     for attempt in range(MAX_RETRIES):
         try:
-            return request_analysis(client, prompt)
+            return request_analysis(client, prompt), None
 
         except errors.APIError as error:
-            should_retry = handle_api_error(error)
+            error_message, should_retry = handle_api_error(error)
             if not should_retry:
-                return None
+                return None, error_message
 
         except httpx.TransportError:
             # no internet, no connection, timeouts
-            print("Network problem: could not reach the Gemini API.")
+            error_message = "Network problem: could not reach the Gemini API. Check your internet connection."
 
         except (json.JSONDecodeError, TypeError):
             # empty, blocked, invalid JSON
-            print("Gemini sent back an empty or invalid response.")
+            error_message = "Gemini sent back an empty or invalid response."
 
         # attempt worth retry
         wait_before_retry(attempt)
 
-    print("Several failed attempts. Error not could not be resolved")
-    return None
+    return None, f"Gave up after {MAX_RETRIES} attempts. Error not could not be resolved. {error_message}"
 
 
 if __name__ == "__main__":

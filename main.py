@@ -77,21 +77,21 @@ def main():
                     status = "Cancelled. No event was added."
                     continue
 
-                event_name, event_description, curr_workload = event_info
+                event_name, event_description, workload = event_info
 
-                ai_result = analyze_event(profile, event_name, event_description)
+                ai_result, error_message = analyze_event(profile, event_name, event_description)
                 # Checks if ai result gives none ---> meaning error
                 if ai_result is None:
                     #TODO
                     #1.Store all the previous inputs and give it to the same page so it can immediately submit again
 
-                    status = "The event could not be analysed. Please try again."
+                    status = error_message
                     is_error = True
                     continue
 
-                event_summary = generate_summary(ai_result, curr_workload)
-                event_summary |= {"event_name": event_name, "event_description":event_description, "curr_workload": curr_workload}
-                display_event_result(event_summary, event_name, event_description)
+                event_summary = generate_summary(ai_result, workload)
+                event_summary |= {"event_name": event_name, "event_description":event_description, "workload": workload}
+                display_event_result(event_summary)
                 events.append(event_summary)
                 
             case "View Analysed Events":
