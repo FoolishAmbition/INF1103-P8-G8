@@ -67,7 +67,7 @@ def main():
                     status = "Profile saved!"
                 profile = updated
 
-            case "Analyse New Event":
+            case "Analyse New Events":
                 if profile == empty_profile():
                     status = "Please create your profile first"
                     is_error = True

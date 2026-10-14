@@ -311,7 +311,7 @@ def get_event_information(previous=None):
         elif choice == "Submit":
 
             # Check if filled or empty
-            if not event_name.strip() or not event_description.strip():
+            if not event_name.strip() or not event_description.strip() or not workload:
                 status = "All the fields are required."
                 is_error = True
                 continue
