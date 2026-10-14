@@ -259,18 +259,18 @@ def test_event_priority_boundaries_are_not_overlapping():
 
 def test_recommendation_rule1_top_scores_low_workload_attend():
     # Rule 1: career >= 4 AND learning >= 4 AND workload in {1,2}
-    assert generate_recommendation(AI_RESPONSE_STRONG, 1) == "Attend"
+    assert generate_recommendation(AI_RESPONSE_STRONG, "Low") == "ATTEND"
 
 
 def test_recommendation_rule1_top_scores_medium_workload_attend():
-    assert generate_recommendation(AI_RESPONSE_STRONG, 2) == "Attend"
+    assert generate_recommendation(AI_RESPONSE_STRONG, "Medium") == "ATTEND"
 
 
 def test_recommendation_rule2_high_value_high_workload_maybe():
     # Rule 2: event_value >= 11 AND workload == 3
     # STRONG: career=5, learning=5 → Rule 1 blocked because workload=3
     # event_value = 14 → falls to Rule 2 → Maybe
-    assert generate_recommendation(AI_RESPONSE_STRONG, 3) == "Maybe"
+    assert generate_recommendation(AI_RESPONSE_STRONG, "High") == "MAYBE"
 
 def test_recommendation_rule3_high_value_low_workload_attend():
     # Rule 3: event_value >= 11 AND workload in {1,2}
@@ -282,32 +282,32 @@ def test_recommendation_rule3_high_value_low_workload_attend():
         "networking_value": 5,      # sum = 12
         "ai_reasoning": "Strong networking, moderate career relevance.",
     }
-    assert generate_recommendation(ai, 1) == "Attend"
+    assert generate_recommendation(ai, "Low") == "ATTEND"
 
 
 def test_recommendation_rule4_mid_value_low_workload_maybe():
     # Rule 4: event_value 7-10 AND workload in {1,2}
     # MEDIUM: 3+3+3 = 9
-    assert generate_recommendation(AI_RESPONSE_MEDIUM, 1) == "Maybe"
+    assert generate_recommendation(AI_RESPONSE_MEDIUM, "Low") == "MAYBE"
 
 
 def test_recommendation_rule5_mid_value_high_workload_maybe():
     # Rule 5: event_value 7-10 AND workload == 3
-    assert generate_recommendation(AI_RESPONSE_MEDIUM, 3) == "Maybe"
+    assert generate_recommendation(AI_RESPONSE_MEDIUM, "High") == "MAYBE"
 
 
 def test_recommendation_rule6_low_value_skip():
     # Rule 6: event_value 3-6 → Skip, regardless of workload
     # WEAK: 1+1+1 = 3
-    assert generate_recommendation(AI_RESPONSE_WEAK, 1) == "Skip"
+    assert generate_recommendation(AI_RESPONSE_WEAK, "Low") == "Skip"
 
 
 def test_recommendation_rule6_low_value_skip_medium_workload():
-    assert generate_recommendation(AI_RESPONSE_WEAK, 2) == "Skip"
+    assert generate_recommendation(AI_RESPONSE_WEAK, "Medium") == "Skip"
 
 
 def test_recommendation_rule6_low_value_skip_high_workload():
-    assert generate_recommendation(AI_RESPONSE_WEAK, 3) == "Skip"
+    assert generate_recommendation(AI_RESPONSE_WEAK, "High") == "Skip"
 
 
 def test_recommendation_rule1_requires_both_thresholds():
@@ -320,7 +320,7 @@ def test_recommendation_rule1_requires_both_thresholds():
         "networking_value": 4,
         "ai_reasoning": "High career, moderate learning.",
     }
-    assert generate_recommendation(ai, 1) == "Attend"
+    assert generate_recommendation(ai, "Low") == "ATTEND"
 
 # ---------------------------------------------------------------------------
 # TESTS: generate_reason
