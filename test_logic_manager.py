@@ -322,6 +322,29 @@ def test_recommendation_rule1_requires_both_thresholds():
     }
     assert generate_recommendation(ai, "Low") == "ATTEND"
 
+def test_recommendation_boundary_event_value_seven_low_workload():
+    # Event value 7 is below the new >=8 threshold → SKIP
+    ai = {
+        "event_category": "Workshop",
+        "career_relevance": 3,
+        "learning_value": 2,
+        "networking_value": 2,  # sum = 7
+        "ai_reasoning": "Low overall value.",
+    }
+    assert generate_recommendation(ai, "Low") == "SKIP"
+
+
+def test_recommendation_boundary_event_value_eight_low_workload():
+    # Event value 8 hits the new >=8 threshold → MAYBE
+    ai = {
+        "event_category": "Workshop",
+        "career_relevance": 3,
+        "learning_value": 3,
+        "networking_value": 2,  # sum = 8
+        "ai_reasoning": "Just enough value.",
+    }
+    assert generate_recommendation(ai, "Low") == "MAYBE"
+
 # ---------------------------------------------------------------------------
 # TESTS: generate_reason
 # ---------------------------------------------------------------------------
