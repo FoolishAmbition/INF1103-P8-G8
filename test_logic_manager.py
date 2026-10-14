@@ -386,24 +386,23 @@ def test_generate_reason_returns_distinct_text_per_branch():
 # ---------------------------------------------------------------------------
 
 def test_generate_summary_rejects_invalid_ai_result():
-    result = generate_summary(AI_RESPONSE_MISSING_FIELDS, 1)
-    assert isinstance(result, str)
-    assert "invalid" in result.lower()
-
+    summary, error = generate_summary(AI_RESPONSE_MISSING_FIELDS, "Low")
+    assert summary is None
+    assert isinstance(error, str)
+    assert "invalid" in error.lower()
 
 def test_generate_summary_returns_dict_for_valid_input():
-    result = generate_summary(AI_RESPONSE_STRONG, 1)
-    assert isinstance(result, dict)
-
+    summary, error = generate_summary(AI_RESPONSE_STRONG, "Low")
+    assert isinstance(summary, dict)
+    assert error is None
 
 def test_generate_summary_contains_all_summary_fields():
-    result = generate_summary(AI_RESPONSE_STRONG, 1)
+    summary, _ = generate_summary(AI_RESPONSE_STRONG, "Low")
     for key in ("event_value", "priority", "recommendation", "reason"):
-        assert key in result, f"missing summary key: {key}"
-
+        assert key in summary
 
 def test_generate_summary_contains_all_ai_fields():
-    result = generate_summary(AI_RESPONSE_STRONG, 1)
+    summary, _ = generate_summary(AI_RESPONSE_STRONG, "Low")
     for key in (
         "event_category",
         "career_relevance",
@@ -411,35 +410,30 @@ def test_generate_summary_contains_all_ai_fields():
         "networking_value",
         "ai_reasoning",
     ):
-        assert key in result, f"missing AI key: {key}"
-
+        assert key in summary
 
 def test_generate_summary_values_are_consistent_with_helpers():
-    result = generate_summary(AI_RESPONSE_STRONG, 1)
-    assert result["event_value"] == calculate_event_value(AI_RESPONSE_STRONG)
-    assert result["priority"] == event_priority(result["event_value"])
-    assert result["recommendation"] == generate_recommendation(AI_RESPONSE_STRONG, 1)
-    assert result["reason"] == generate_reason(result["recommendation"], 1)
-
+    summary, _ = generate_summary(AI_RESPONSE_STRONG, "Low")
+    assert summary["event_value"] == calculate_event_value(AI_RESPONSE_STRONG)
+    assert summary["priority"] == event_priority(summary["event_value"])
+    assert summary["recommendation"] == generate_recommendation(AI_RESPONSE_STRONG, "Low")
+    assert summary["reason"] == generate_reason(summary["recommendation"], "Low")
 
 def test_generate_summary_priority_high_for_top_response():
-    result = generate_summary(AI_RESPONSE_STRONG, 1)
-    assert result["priority"] == "High"
-    assert result["recommendation"] == "Attend"
-
+    summary, _ = generate_summary(AI_RESPONSE_STRONG, "Low")
+    assert summary["priority"] == "High"
+    assert summary["recommendation"] == "ATTEND"
 
 def test_generate_summary_priority_low_for_weak_response():
-    result = generate_summary(AI_RESPONSE_WEAK, 1)
-    assert result["priority"] == "Low"
-    assert result["recommendation"] == "Skip"
-
+    summary, _ = generate_summary(AI_RESPONSE_WEAK, "Low")
+    assert summary["priority"] == "Low"
+    assert summary["recommendation"] == "SKIP"
 
 def test_generate_summary_recommendation_depends_on_workload():
-    # Same AI scores, different workload → different recommendation
-    low_workload = generate_summary(AI_RESPONSE_STRONG, 1)
-    high_workload = generate_summary(AI_RESPONSE_STRONG, 3)
-    assert low_workload["recommendation"] == "Attend"
-    assert high_workload["recommendation"] == "Maybe"
+    low_workload, _ = generate_summary(AI_RESPONSE_STRONG, "Low")
+    high_workload, _ = generate_summary(AI_RESPONSE_STRONG, "High")
+    assert low_workload["recommendation"] == "ATTEND"
+    assert high_workload["recommendation"] == "MAYBE"
 
 # ---------------------------------------------------------------------------
 # MINIMAL TEST RUNNER (no pytest dependency required in Docker)
