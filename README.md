@@ -97,7 +97,7 @@ docker build -t eventwise .
 docker run --rm -it --env-file .env -v "${PWD}/data:/app/data" eventwise
 ```
 
-7. Team Repository Details
+7. Test Script
 
 Run the automated logic tests (no live API connection is required):
 
