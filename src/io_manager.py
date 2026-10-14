@@ -332,12 +332,12 @@ def display_event_result(event_summary, back_label="Return to the main menu"):
     }.get(str(recommendation).upper(), "bold cyan")
 
     console.rule("[bold cyan]Event[/bold cyan]", align="left", style="cyan")
-    console.print(f"[bold]{event_summary.get("event_name")}[/bold]\n{event_summary.get("event_description")}\n")
+    console.print(f'[bold]{event_summary.get("event_name")}[/bold]\n{event_summary.get("event_description")}\n')
 
     # Score breakdown
     format_dict = format_scores(event_summary["career_relevance"], event_summary["learning_value"], event_summary["networking_value"])
     console.rule(f"[bold magenta]Score Breakdown[/bold magenta]", align="left", style="magenta")
-    console.print(f"Career Relevance: {format_dict["career_relevance"]}  •  Learning Value: {format_dict["learning_value"]}  •  Networking Value: {format_dict["networking_value"]}\n")
+    console.print(f'Career Relevance: {format_dict["career_relevance"]}  •  Learning Value: {format_dict["learning_value"]}  •  Networking Value: {format_dict["networking_value"]}\n')
 
     # Priority and Recommendation
     console.rule(
