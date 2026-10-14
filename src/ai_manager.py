@@ -64,7 +64,7 @@ SYSTEM_INSTRUCTION = (
     "Assign integer ratings from 1 to 5 for career_relevance, learning_value, "
     "networking_value."
     "Do not assume or invent information that is not provided. "
-    "If the event category cannot be determined, return 'unknown'."
+    "If the event category cannot be determined, return 'Unknown'."
 )
 
 

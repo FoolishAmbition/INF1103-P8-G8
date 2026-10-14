@@ -1,3 +1,5 @@
+import random
+
 CAREER_RELEVANCE = {
     1: "Not relevant at all",
     2: "Slightly",
@@ -19,30 +21,22 @@ NETWORKING_VALUE = {
     2: "Very limited",
     3: "Some",
     4: "Good",
-    5: "Very Strong"
+    5: "Very Strong",
 }
 
 
 # check if the ai_result is valid
 def validate_ai_result(ai_result):
-    score_limit = [
-        "career_relevance",
-        "learning_value",
-        "networking_value",
-    ]
+    score_limit = ["career_relevance", "learning_value", "networking_value"]
+    text_field = ["event_category", "ai_reasoning"]
 
-    text_field = [
-        "event_category",
-        "ai_reasoning"
-    ]
-
-    #check if score is within minimum and maximum
+    # check if score is int and within minimum and maximum
     for key in score_limit:
         val = ai_result.get(key)
         if type(val) is not int or not (1 <= val <= 5):
             return False
 
-    #validate AI text field
+    # validate AI text field
     for key in text_field:
         val = ai_result.get(key)
         if not isinstance(val, str) or not val.strip():
@@ -51,9 +45,13 @@ def validate_ai_result(ai_result):
     return True
 
 
-#event value calculation based on the ai_result
+# event value calculation based on the ai_result
 def calculate_event_value(ai_result):
-    return ai_result["career_relevance"] + ai_result["learning_value"] + ai_result["networking_value"]
+    return (
+        ai_result["career_relevance"]
+        + ai_result["learning_value"]
+        + ai_result["networking_value"]
+    )
 
 
 # categorise event value
@@ -129,8 +127,8 @@ def generate_reason(recommendation, workload):
 
 def generate_summary(ai_result: dict, workload: int):
     if not validate_ai_result(ai_result):
-        return {"error": "Invalid AI result."}
-    
+        return None, "Invalid AI result. Please analyze the event again"
+
     event_value = calculate_event_value(ai_result)
     recommendation = generate_recommendation(ai_result, workload)
 
@@ -140,10 +138,10 @@ def generate_summary(ai_result: dict, workload: int):
         "priority": event_priority(event_value),
         "reason": generate_reason(recommendation, workload),
     }
-    
+
     # add ai_result dict contents to summary dict contents
     summary |= ai_result
-    return summary
+    return summary, None
 
 
 def format_scores(career_relevance, learning_value, networking_value):
@@ -151,6 +149,19 @@ def format_scores(career_relevance, learning_value, networking_value):
         "career_relevance": f"{CAREER_RELEVANCE[career_relevance]} [{career_relevance}/5]",
         "learning_value": f"{LEARNING_VALUE[learning_value]} [{learning_value}/5]",
         "networking_value": f"{NETWORKING_VALUE[networking_value]} [{networking_value}/5]",
+    }
+
+
+def add_dummy_event():
+    return {
+        "event_category": "Dummy Category",
+        "career_relevance": random.randint(1, 5),
+        "learning_value": random.randint(1, 5),
+        "networking_value": random.randint(1, 5),
+        "ai_reasoning": "Dummy AI reasoning",
+        "event_name": "Dummy Event Name",
+        "event_description": "Dummy Event Description",
+        "workload": random.choice(["Low", "Medium", "High"]),
     }
 
 
