@@ -155,6 +155,47 @@ def test_validate_ai_result_rejects_float_scores():
     }
     assert validate_ai_result(bad) is False
 
+def test_validate_ai_result_rejects_missing_event_category():
+    bad = {
+        "career_relevance": 4,
+        "learning_value": 5,
+        "networking_value": 3,
+        "ai_reasoning": "Missing category.",
+    }
+    assert validate_ai_result(bad) is False
+
+
+def test_validate_ai_result_rejects_empty_event_category():
+    bad = {
+        "event_category": "   ",
+        "career_relevance": 4,
+        "learning_value": 5,
+        "networking_value": 3,
+        "ai_reasoning": "Blank category.",
+    }
+    assert validate_ai_result(bad) is False
+
+
+def test_validate_ai_result_rejects_missing_ai_reasoning():
+    bad = {
+        "event_category": "Workshop",
+        "career_relevance": 4,
+        "learning_value": 5,
+        "networking_value": 3,
+    }
+    assert validate_ai_result(bad) is False
+
+
+def test_validate_ai_result_rejects_non_string_ai_reasoning():
+    bad = {
+        "event_category": "Workshop",
+        "career_relevance": 4,
+        "learning_value": 5,
+        "networking_value": 3,
+        "ai_reasoning": 12345,
+    }
+    assert validate_ai_result(bad) is False
+
 # ---------------------------------------------------------------------------
 # TESTS: calculate_event_value
 # ---------------------------------------------------------------------------
