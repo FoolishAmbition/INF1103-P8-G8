@@ -1,11 +1,11 @@
-EventWise - AI-Assisted Student Event Decision System
+# EventWise - AI-Assisted Student Event Decision System
 
-1. Problem Statement and Target Users
+## 1. Problem Statement and Target Users
 Students are often invited to career talks, workshops, networking sessions, club activities and other school events. With assignments, classes and other commitments, it can be difficult to decide whether an event is worth attending. Students may miss useful opportunities or spend time on events that are not very relevant to them.
 
 EventWise is a student event decision-making assistant that helps users decide whether to attend an event based on event details and their current situation. The target users are university and polytechnic students who need a quick way to judge whether an event is worth their time based on their workload, field of study, interests and the event information provided.
 
-2. User Inputs and Features
+## 2. User Inputs and Features
 When using the system for the first time, the student creates a profile containing:
 
 - Field of study
@@ -29,7 +29,7 @@ The main menu provides the following options:
 - Add Dummy Event - add a randomly generated event for demonstration/testing without an API call
 - Exit - save current data and close the application
 
-3. Use of AI
+## 3. Use of AI
 Each submitted event is sent to the Google Gemini API together with the student's saved profile. Gemini returns structured JSON containing:
 
 - Event category
@@ -42,7 +42,7 @@ The response is checked to make sure all required fields are present and valid. 
 
 If the API key is missing, the API request fails, the response is invalid, or a temporary API/network error occurs, the application displays an error. Temporary failures are retried up to three times.
 
-4. Business Rules
+## 4. Business Rules
 The program calculates the event value as:
 
 Event Value = Career Relevance + Learning Value + Networking Value
@@ -66,7 +66,7 @@ Recommendations are evaluated from top to bottom:
 
 The final recommendation, priority, score breakdown, AI reasoning and a short explanation are displayed to the user. Analysed events are saved in `data/events.json` and can be viewed later.
 
-5. Running the Project
+## 5. Running the Project
 
 Install the dependencies:
 
@@ -88,7 +88,7 @@ python main.py
 
 The application stores profile and event history locally in the `data` directory. The files are created automatically when data is saved.
 
-6. Docker
+## 6. Docker
 
 Build and run the application with Docker:
 
@@ -97,7 +97,7 @@ docker build -t eventwise .
 docker run --rm -it --env-file .env -v "${PWD}/data:/app/data" eventwise
 ```
 
-7. Test Script
+## 7. Test Script
 
 Run the automated logic tests (no live API connection is required):
 
@@ -105,20 +105,28 @@ Run the automated logic tests (no live API connection is required):
 python test_logic_manager.py
 ```
 
-8. Team Repository Details
+Docker run test script
+
+```text
+docker run --rm -it --env-file .env -v "${PWD}/data:/app/data" eventwise python test_logic_manager.py
+```
+
+## 8. Team Repository Details
 GitHub Repository URL: https://github.com/FoolishAmbition/INF1103-P8-G8
 
 Overall Flow:
-User
-  |
-  v
-io_manager.py - collect and validate profile, event and workload input
-  |
-  v
-ai_manager.py - send the profile and event to Gemini and receive structured JSON
-  |
-  v
-logic_manager.py - validate AI output, calculate value, priority and recommendation
-  |
-  v
-data_manager.py - load and save profile and event history
+```text
+[ User ]
+    │
+    ▼
+[ io_manager.py ] ── Collect & validate profile, event, and workload input
+    │
+    ▼
+[ ai_manager.py ] ── Send profile and event to Gemini; receive structured JSON
+    │
+    ▼
+[ logic_manager.py ] ── Validate AI output, calculate value, priority, and recommendation
+    │
+    ▼
+[ data_manager.py ] ── Load and save profile and event history
+```
