@@ -1,99 +1,132 @@
-EventWise — AI-Assisted Student Event Decision System 
+# EventWise - AI-Assisted Student Event Decision System
 
-1. Problem Statement and Target Users
+## 1. Problem Statement and Target Users
 Students are often invited to career talks, workshops, networking sessions, club activities and other school events. With assignments, classes and other commitments, it can be difficult to decide whether an event is worth attending. Students may miss useful opportunities or spend time on events that are not very relevant to them.
 
-EventWise is a student event decision-making assistant that helps users decide whether to attend an event based on event details and their current situation. The target users are university and polytechnic students who regularly receive event invitations and need a quick way to judge whether an event is worth their time based on the student's workload, field of study, interests and the event information provided.
+EventWise is a student event decision-making assistant that helps users decide whether to attend an event based on event details and their current situation. The target users are university and polytechnic students who need a quick way to judge whether an event is worth their time based on their workload, field of study, interests and the event information provided.
 
-2. User Inputs
-To keep the application quick and easy to use, the user will not need to manually enter every detail about an event. When using the system for the first time, the student will provide a short profile containing their field of study and interests. This profile will be saved and reused for future event recommendations.
+## 2. User Inputs and Features
+When using the system for the first time, the student creates a profile containing:
 
-Student’s Profile: (Example)
-Field of study and interests, e.g. “ICT student interested in cybersecurity and AI.” 
-What are you studying and what are you interested in? (Example question)
+- Field of study
+- One or more interests
 
-Then, it will save into a JSON file. (profile.json) The next time the program runs, it can load the profile automatically. 
-For each event, the user will only need to provide:
-Event information – The user can paste the event name and description together. Information such as event type, duration and networking opportunities can be identified by the AI where available. 
-(Example: Google Cloud Career Workshop — Learn about cloud computing careers, speak with engineers and participate in a hands-on workshop. 2pm–5pm at SIT Punggol.)
-Current workload – 1. Low, 2. Medium or 3. High. (Numerical)
+The profile is saved in `data/profile.json` and loaded automatically the next time the program runs. The profile can also be edited from the main menu.
 
-This directly supports the required input validation in the I/O Manager. 
-For example:
+For each event, the user provides:
 
-If some event information is not included in the description, the AI will return the missing field as unknown instead of making up information. All inputs will be validated. Invalid values, such as the workload outside of low, medium and high (1-3) will be rejected, and the user will be asked to enter the value again.
+- Event name
+- Event description
+- Current workload: Low, Medium or High
 
-3. Use of AI
-Every event submitted by the user will be passed to the AI for analysis. The AI will analyse the event information together with the student's saved profile. The AI will identify useful details from the event description, such as the event category. It will then score how relevant the event is to the student.
+The application validates required fields before submission. Users can cancel profile or event input without saving the changes.
 
+The main menu provides the following options:
 
-The AI will not directly decide whether the student should attend the event. The final recommendation will be determined by the program's business rules using the AI scores together with the student's workload. The program's logic will use the AI output together with the user's inputs to decide whether the recommendation is ATTEND, MAYBE or SKIP.
+- Profile - create or edit the saved student profile
+- Analyse New Events - analyse an event using Gemini AI
+- View Analysed Events - view saved event summaries and details
+- Add Dummy Event - add a randomly generated event for demonstration/testing without an API call
+- Exit - save current data and close the application
 
+## 3. Use of AI
+Each submitted event is sent to the Google Gemini API together with the student's saved profile. Gemini returns structured JSON containing:
 
-4. Business Rules
-After receiving the AI analysis, the Logic Manager will use the AI scores together with the student's inputs to decide whether the recommendation should be ATTEND, MAYBE or SKIP. 
-The AI will give three main scores from 1 to 5:
-Career Relevance
-Learning Value
-Networking Value
-The program will calculate an overall event value using:
+- Event category
+- Career relevance score from 1 to 5
+- Learning value score from 1 to 5
+- Networking value score from 1 to 5
+- Short AI reasoning
+
+The response is checked to make sure all required fields are present and valid. The AI does not make the final attendance decision. The program's business rules use the AI scores together with the student's workload to return ATTEND, MAYBE or SKIP.
+
+If the API key is missing, the API request fails, the response is invalid, or a temporary API/network error occurs, the application displays an error. Temporary failures are retried up to three times.
+
+## 4. Business Rules
+The program calculates the event value as:
+
 Event Value = Career Relevance + Learning Value + Networking Value
-The minimum event value is 3 and the maximum is 15.
-Maximum
-Minimum
-5+5+5=15
-1+1+1 = 3
 
-The following rules will then be applied: 
-Rule
-Conditions
-Recommendation
-1
-Career Relevance ≥ 4 AND Learning Value ≥ 4 AND workload is Low or Medium 
-ATTEND
-2
-Event Value is 11–15 AND workload is High
-MAYBE
-3
-Event Value is 11–15 AND workload is Low or Medium
-ATTEND
-4
-Event Value is 7–10 AND workload is Low or Medium
-MAYBE 
-5
-Event Value is 7–10 AND workload is High 
-MAYBE
-6
-Event Value is 3–6
-SKIP
+The minimum event value is 3 and the maximum is 15. Event priority is classified as:
 
-Rule 1 is the multi-condition rule. It uses both career_relevance and learning_value, which are fields generated by the AI. For example, even if an event has good networking opportunities, an event that is highly relevant to the student's career and also provides strong learning opportunities will be prioritised when the student's workload is manageable. 
-*Rules are evaluated from top to bottom. Once a matching rule is found, the system returns that recommendation. 
-The final recommendation and a short reason will then be shown to the user. The event information, AI analysis and final recommendation will also be saved to a JSON file so that the user can view their previous event recommendations.
+- High: 11-15
+- Medium: 7-10
+- Low: 3-6
 
+Recommendations are evaluated from top to bottom:
 
-5. Team Repository Details
-GitHub Repository URL: https://github.com/FoolishAmbition/INF1103-P8-G8 
+| Condition | Recommendation |
+| --- | --- |
+| Career relevance >= 4 AND learning value >= 4 AND workload is Low or Medium | ATTEND |
+| Event value >= 11 AND workload is Low or Medium | ATTEND |
+| Event value >= 11 AND workload is High | MAYBE |
+| Event value >= 8 AND workload is Low or Medium | MAYBE |
+| Event value >= 8 AND workload is High | SKIP |
+| Event value <= 7 | SKIP |
 
-Docker: 
-/v dockerfile save within container after every run 
-We will not be saving locally.
+The final recommendation, priority, score breakdown, AI reasoning and a short explanation are displayed to the user. Analysed events are saved in `data/events.json` and can be viewed later.
+
+## 5. Running the Project
+
+Install the dependencies:
+
+```text
+pip install -r requirements.txt
+```
+
+Create a `.env` file in the project root and add a Google AI Studio API key:
+
+```text
+API_KEY=YOUR_API_KEY_HERE
+```
+
+Start the application:
+
+```text
+python main.py
+```
+
+The application stores profile and event history locally in the `data` directory. The files are created automatically when data is saved.
+
+## 6. Docker
+
+Build and run the application with Docker:
+
+```text
+docker build -t eventwise .
+docker run --rm -it --env-file .env -v "${PWD}/data:/app/data" eventwise
+```
+
+## 7. Test Script
+
+Run the automated logic tests (no live API connection is required):
+
+```text
+python test_logic_manager.py
+```
+
+Docker run test script
+
+```text
+docker run --rm -it --env-file .env -v "${PWD}/data:/app/data" eventwise python test_logic_manager.py
+```
+
+## 8. Team Repository Details
+GitHub Repository URL: https://github.com/FoolishAmbition/INF1103-P8-G8
 
 Overall Flow:
-User 
-↓ 
-io_manager.py 
-↓ 
-collect profile collect event information collect workload validate input 
-↓ 
-ai_manager.py 
-↓ 
-send event + profile to AI receive structured JSON 
-↓ 
-logic_manager.py 
-↓ 
-calculate event value apply business rules 
-↓ 
-data_manager.py 
-↓ 
-save profile save event history 
+```text
+[ User ]
+    │
+    ▼
+[ io_manager.py ] ── Collect & validate profile, event, and workload input
+    │
+    ▼
+[ ai_manager.py ] ── Send profile and event to Gemini; receive structured JSON
+    │
+    ▼
+[ logic_manager.py ] ── Validate AI output, calculate value, priority, and recommendation
+    │
+    ▼
+[ data_manager.py ] ── Load and save profile and event history
+```

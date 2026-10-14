@@ -1,0 +1,5 @@
+google-auth
+google-genai
+questionary
+rich
+python-dotenv

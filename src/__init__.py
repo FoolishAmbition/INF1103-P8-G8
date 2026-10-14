@@ -1,0 +1,1 @@
+"""EventWise source package: I/O, AI, logic, and data managers."""
