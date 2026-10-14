@@ -86,12 +86,6 @@ Start the application:
 python main.py
 ```
 
-Run the automated logic tests (no live API connection is required):
-
-```text
-python test_logic_manager.py
-```
-
 The application stores profile and event history locally in the `data` directory. The files are created automatically when data is saved.
 
 6. Docker
@@ -104,6 +98,14 @@ docker run --rm -it --env-file .env -v "${PWD}/data:/app/data" eventwise
 ```
 
 7. Team Repository Details
+
+Run the automated logic tests (no live API connection is required):
+
+```text
+python test_logic_manager.py
+```
+
+8. Team Repository Details
 GitHub Repository URL: https://github.com/FoolishAmbition/INF1103-P8-G8
 
 Overall Flow:
