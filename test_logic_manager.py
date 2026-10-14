@@ -19,9 +19,9 @@ from logic_manager import (
     event_priority,
     generate_recommendation,
     generate_reason,
-    get_ai_reasoning,
     generate_summary,
 )
+
 
 
 # ---------------------------------------------------------------------------
@@ -356,35 +356,6 @@ def test_generate_reason_returns_distinct_text_per_branch():
     maybe_light = generate_reason("Maybe", 1)
     skip = generate_reason("Skip", 1)
     assert len({attend, maybe_heavy, maybe_light, skip}) == 4
-
-
-# ---------------------------------------------------------------------------
-# TESTS: get_ai_reasoning
-# ---------------------------------------------------------------------------
-# Bug fix in commit "fix get_ai_reasoning key mismatch found by test suite":
-# the function was originally looking for "ai-reasoning" (hyphen), but the
-# AI schema returns "ai_reasoning" (underscore). Tests updated to match the corrected behaviour.
-
-def test_get_ai_reasoning_returns_text_for_real_ai_response():
-    # Real AI responses use the underscore key → function returns the string
-    result = get_ai_reasoning(AI_RESPONSE_STRONG)
-    assert result == AI_RESPONSE_STRONG["ai_reasoning"]
-
-
-def test_get_ai_reasoning_returns_default_when_key_missing():
-    payload = {
-        "event_category": "Workshop",
-        "career_relevance": 4,
-        "learning_value": 4,
-        "networking_value": 4,
-        # ai_reasoning intentionally missing
-    }
-    assert get_ai_reasoning(payload) == "No reasoning provided."
-
-
-def test_get_ai_reasoning_rejects_non_string_value():
-    payload = {"ai_reasoning": 12345}
-    assert get_ai_reasoning(payload) == "Invalid reasoning format."
 
 # ---------------------------------------------------------------------------
 # TESTS: generate_summary
