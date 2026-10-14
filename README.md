@@ -100,7 +100,7 @@ Build and run the application with Docker:
 
 ```text
 docker build -t eventwise .
-docker run -it --env-file .env eventwise
+docker run --rm -it --env-file .env -v "${PWD}/data:/app/data" eventwise
 ```
 
 7. Team Repository Details
