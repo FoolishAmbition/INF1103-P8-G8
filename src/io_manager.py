@@ -96,6 +96,13 @@ def display_message(message):
     console.print(f"\n{message}")
 
 
+def color_guide():
+    return { 
+        1: "bold green", 
+        2: "bold yellow", 
+        3: "bold red" 
+    }
+
 # ----------------------------------------------------------------------------------
 # FUNCTIONS
 # ----------------------------------------------------------------------------------
@@ -368,12 +375,25 @@ def display_all_events(events: list):
         table.add_column("Learning", style="white")
         table.add_column("Networking", style="white")
 
+        styles = color_guide()
+        rec_levels = {"ATTEND": 1, "MAYBE": 2, "SKIP": 3}
+        priority_levels = {"High": 1, "Medium": 2, "Low": 3}
+
         for i, event in enumerate(events, start=1):
+            
+            rec = str(event.get("recommendation", "Unknown"))
+            rec_style = styles.get(rec_levels.get(rec.upper()), "bold cyan")
+
+            priority = str(event.get("priority", "Unknown"))
+            priority_style = styles.get(priority_levels.get(priority), "bold cyan")
+
             table.add_row(
                 str(i),
                 str(event.get("event_name", "Unnamed event")),
-                str(event.get("priority", "Unknown")),
-                str(event.get("recommendation", "Unknown")),
+                #str(event.get("priority", "Unknown")),
+                f"[{priority_style}]{priority}[/{priority_style}]",
+                f"[{rec_style}]{rec}[/{rec_style}]",
+                # str(event.get("recommendation", "Unknown")),
                 str(event.get("reason", "No reason provided")),
                 str(event.get("career_relevance", 0)),
                 str(event.get("learning_value", 0)),
