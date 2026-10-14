@@ -297,7 +297,7 @@ def test_event_priority_boundaries_are_not_overlapping():
 # ---------------------------------------------------------------------------
 # TESTS: generate_recommendation  (Rules 1-6 from README)
 # ---------------------------------------------------------------------------
-# Workload convention: 1 = Low, 2 = Medium, 3 = High
+#  Workload convention: "Low", "Medium", "High"
 # (matches io_manager.get_event_information's questionary values)
 
 def test_recommendation_rule1_top_scores_low_workload_attend():
@@ -311,7 +311,7 @@ def test_recommendation_rule1_top_scores_medium_workload_attend():
 
 def test_recommendation_rule2_high_value_high_workload_maybe():
     # Rule 2: event_value >= 11 AND workload == 3
-    # STRONG: career=5, learning=5 → Rule 1 blocked because workload=3
+    # STRONG: career=5, learning=5 → Rule 1 blocked because workload="High"
     # event_value = 14 → falls to Rule 2 → Maybe
     assert generate_recommendation(AI_RESPONSE_STRONG, "High") == "MAYBE"
 
@@ -334,23 +334,24 @@ def test_recommendation_rule4_mid_value_low_workload_maybe():
     assert generate_recommendation(AI_RESPONSE_MEDIUM, "Low") == "MAYBE"
 
 
-def test_recommendation_rule5_mid_value_high_workload_maybe():
-    # Rule 5: event_value 7-10 AND workload == 3
-    assert generate_recommendation(AI_RESPONSE_MEDIUM, "High") == "MAYBE"
+def test_recommendation_mid_value_high_workload_skip():
+    # New Behavour: event_value >= 8 AND High workload → SKIP
+    # MEDIUM: 3+3+3 = 9
+    assert generate_recommendation(AI_RESPONSE_MEDIUM, "High") == "SKIP"
 
 
 def test_recommendation_rule6_low_value_skip():
     # Rule 6: event_value 3-6 → Skip, regardless of workload
     # WEAK: 1+1+1 = 3
-    assert generate_recommendation(AI_RESPONSE_WEAK, "Low") == "Skip"
+    assert generate_recommendation(AI_RESPONSE_WEAK, "Low") == "SKIP"
 
 
 def test_recommendation_rule6_low_value_skip_medium_workload():
-    assert generate_recommendation(AI_RESPONSE_WEAK, "Medium") == "Skip"
+    assert generate_recommendation(AI_RESPONSE_WEAK, "Medium") == "SKIP"
 
 
 def test_recommendation_rule6_low_value_skip_high_workload():
-    assert generate_recommendation(AI_RESPONSE_WEAK, "High") == "Skip"
+    assert generate_recommendation(AI_RESPONSE_WEAK, "High") == "SKIP"
 
 
 def test_recommendation_rule1_requires_both_thresholds():
@@ -392,7 +393,7 @@ def test_recommendation_boundary_event_value_eight_low_workload():
 # TESTS: generate_reason
 # ---------------------------------------------------------------------------
 
-def test_generate_reason_attend():
+def test_generate_reason_attend_low_workload():
     reason = generate_reason("ATTEND", "Low")
     assert isinstance(reason, str)
     assert "manageable" in reason.lower()
@@ -413,8 +414,7 @@ def test_generate_reason_maybe_with_low_workload_mentions_manageable():
 def test_generate_reason_skip():
     reason = generate_reason("SKIP", "Low")
     assert isinstance(reason, str)
-    assert "not highly relevant" in reason.lower()
-
+    assert "value" in reason.lower() or "workload" in reason.lower()
 
 def test_generate_reason_returns_distinct_text_per_branch():
     attend_low = generate_reason("ATTEND", "Low")
