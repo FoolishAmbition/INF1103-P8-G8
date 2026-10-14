@@ -20,6 +20,8 @@ from logic_manager import (
     generate_recommendation,
     generate_reason,
     generate_summary,
+    format_scores,
+    add_dummy_event,
 )
 
 
@@ -475,6 +477,62 @@ def test_generate_summary_recommendation_depends_on_workload():
     high_workload, _ = generate_summary(AI_RESPONSE_STRONG, "High")
     assert low_workload["recommendation"] == "ATTEND"
     assert high_workload["recommendation"] == "MAYBE"
+
+# ---------------------------------------------------------------------------
+# TESTS: format_scores
+# ---------------------------------------------------------------------------
+
+def test_format_scores_includes_numeric_and_text():
+    result = format_scores(5, 4, 3)
+    assert "5/5" in result["career_relevance"]
+    assert "4/5" in result["learning_value"]
+    assert "3/5" in result["networking_value"]
+
+
+def test_format_scores_returns_three_keys():
+    result = format_scores(1, 2, 3)
+    assert set(result.keys()) == {
+        "career_relevance",
+        "learning_value",
+        "networking_value",
+    }
+
+
+# ---------------------------------------------------------------------------
+# TESTS: add_dummy_event
+# ---------------------------------------------------------------------------
+
+def test_add_dummy_event_returns_valid_schema():
+    event = add_dummy_event()
+    assert validate_ai_result(event) is True
+
+
+def test_add_dummy_event_has_required_fields():
+    event = add_dummy_event()
+    for key in (
+        "event_category",
+        "career_relevance",
+        "learning_value",
+        "networking_value",
+        "ai_reasoning",
+        "event_name",
+        "event_description",
+        "workload",
+    ):
+        assert key in event, f"missing key: {key}"
+
+
+def test_add_dummy_event_scores_in_range():
+    for _ in range(20):
+        event = add_dummy_event()
+        for key in ("career_relevance", "learning_value", "networking_value"):
+            assert 1 <= event[key] <= 5
+
+
+def test_add_dummy_event_workload_is_valid():
+    for _ in range(20):
+        event = add_dummy_event()
+        assert event["workload"] in ("Low", "Medium", "High")
 
 # ---------------------------------------------------------------------------
 # MINIMAL TEST RUNNER (no pytest dependency required in Docker)
