@@ -350,35 +350,36 @@ def test_recommendation_boundary_event_value_eight_low_workload():
 # ---------------------------------------------------------------------------
 
 def test_generate_reason_attend():
-    reason = generate_reason("Attend", 1)
+    reason = generate_reason("ATTEND", "Low")
     assert isinstance(reason, str)
-    assert "highly relevant" in reason.lower()
+    assert "manageable" in reason.lower()
 
 
 def test_generate_reason_maybe_with_high_workload_mentions_heavy():
-    reason = generate_reason("Maybe", 3)
+    reason = generate_reason("MAYBE", "High")
     assert isinstance(reason, str)
     assert "heavy" in reason.lower()
 
 
 def test_generate_reason_maybe_with_low_workload_mentions_manageable():
-    reason = generate_reason("Maybe", 1)
+    reason = generate_reason("MAYBE", "Low")
     assert isinstance(reason, str)
     assert "manageable" in reason.lower()
 
 
 def test_generate_reason_skip():
-    reason = generate_reason("Skip", 1)
+    reason = generate_reason("SKIP", "Low")
     assert isinstance(reason, str)
     assert "not highly relevant" in reason.lower()
 
 
 def test_generate_reason_returns_distinct_text_per_branch():
-    attend = generate_reason("Attend", 1)
-    maybe_heavy = generate_reason("Maybe", 3)
-    maybe_light = generate_reason("Maybe", 1)
-    skip = generate_reason("Skip", 1)
-    assert len({attend, maybe_heavy, maybe_light, skip}) == 4
+    attend_low = generate_reason("ATTEND", "Low")
+    attend_high = generate_reason("ATTEND", "High")
+    maybe_low = generate_reason("MAYBE", "Low")
+    maybe_high = generate_reason("MAYBE", "High")
+    skip = generate_reason("SKIP", "Low")
+    assert len({attend_low, attend_high, maybe_low, maybe_high, skip}) == 5
 
 # ---------------------------------------------------------------------------
 # TESTS: generate_summary
