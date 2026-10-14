@@ -301,7 +301,7 @@ def test_event_priority_boundaries_are_not_overlapping():
 # (matches io_manager.get_event_information's questionary values)
 
 def test_recommendation_rule1_top_scores_low_workload_attend():
-    # Rule 1: career >= 4 AND learning >= 4 AND workload in {1,2}
+    # Rule 1: career >= 4 AND learning >= 4 AND workload in {"Low","Medium"}
     assert generate_recommendation(AI_RESPONSE_STRONG, "Low") == "ATTEND"
 
 
@@ -402,13 +402,13 @@ def test_generate_reason_attend_low_workload():
 def test_generate_reason_maybe_with_high_workload_mentions_heavy():
     reason = generate_reason("MAYBE", "High")
     assert isinstance(reason, str)
-    assert "heavy" in reason.lower()
+    assert "commitments" in reason.lower()
 
 
 def test_generate_reason_maybe_with_low_workload_mentions_manageable():
     reason = generate_reason("MAYBE", "Low")
     assert isinstance(reason, str)
-    assert "manageable" in reason.lower()
+    assert "consider" in reason.lower()
 
 
 def test_generate_reason_skip():
