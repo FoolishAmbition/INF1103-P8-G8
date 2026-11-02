@@ -1,49 +1,67 @@
-import json
-import os
+"""DataManager: loads and saves records through an injected PersistenceStrategy.
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BASE_DIR, "data")
+Recovers gracefully from corrupt/missing files (returns empty/None and
+does not crash), which the exception-handling matrix documents.
+"""
 
-PROFILE_FILE = os.path.join(DATA_DIR, "profile.json")
-EVENTS_FILE = os.path.join(DATA_DIR, "events.json")
-
-
-def ensure_data_directory():
-    os.makedirs(DATA_DIR, exist_ok=True)
+from src.base_manager import BaseManager
+from src.exceptions import DataCorruptionError
+from src.storage import JsonStorage, PersistenceStrategy
 
 
-def save_profile(profile:dict):
-    ensure_data_directory()
-    with open(PROFILE_FILE, "w", encoding="utf-8") as file:
-        json.dump(profile, file, indent=4)
+class DataManager(BaseManager):
+    PROFILE_KEY = "profile"
+    EVENTS_KEY = "events"
+
+    def __init__(self, storage: PersistenceStrategy | None = None):
+        super().__init__(name="data")
+        self._storage = storage or JsonStorage()
+
+    def set_storage(self, strategy: PersistenceStrategy) -> None:
+        self._storage = strategy
+
+    # -- profile -------------------------------------------------------
+    def load_profile(self):
+        try:
+            return self._storage.load(self.PROFILE_KEY)
+        except DataCorruptionError:
+            return None
+
+    def save_profile(self, profile) -> None:
+        self._storage.save(self.PROFILE_KEY, profile)
+
+    # -- events --------------------------------------------------------
+    def load_events(self) -> list:
+        try:
+            data = self._storage.load(self.EVENTS_KEY)
+            return data if isinstance(data, list) else []
+        except DataCorruptionError:
+            return []
+
+    def save_events(self, events: list) -> None:
+        self._storage.save(self.EVENTS_KEY, events)
+
+    def run(self) -> None:
+        return None
+
+
+# ----------------------------------------------------------------------
+# Module-level wrappers (backward compatible with main.py)
+# ----------------------------------------------------------------------
+_default_data = DataManager()
 
 
 def load_profile():
-    try:
-        with open(PROFILE_FILE, "r", encoding="utf-8") as file:
-            return json.load(file)
-
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
+    return _default_data.load_profile()
 
 
-def save_events(events:list):
-    ensure_data_directory()
-
-    with open(EVENTS_FILE, "w", encoding="utf-8") as file:
-        json.dump(events, file, indent=4)
+def save_profile(profile):
+    return _default_data.save_profile(profile)
 
 
 def load_events():
-    try:
-        with open(EVENTS_FILE, "r", encoding="utf-8") as file:
-            return json.load(file)
-
-    except (FileNotFoundError, json.JSONDecodeError):
-        return []
+    return _default_data.load_events()
 
 
-# SEARCH / QUERY EVENTS
-def query_events(filter_function):
-    events = load_events()
-    return [event for event in events if filter_function(event)]
+def save_events(events):
+    return _default_data.save_events(events)
