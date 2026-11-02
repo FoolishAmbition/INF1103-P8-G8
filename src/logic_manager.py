@@ -1,181 +1,162 @@
+"""LogicManager: applies business rules to AI-enriched records.
+
+The class holds a RuleEngine and a ScoringStrategy (both injected).
+Module-level functions are kept as thin wrappers so existing callers
+(main.py and test_logic_manager.py) keep working during the refactor.
+"""
+
 import random
 
-CAREER_RELEVANCE = {
-    1: "Not relevant at all",
-    2: "Slightly",
-    3: "Somewhat",
-    4: "Highly",
-    5: "Directly relevant",
-}
-
-LEARNING_VALUE = {
-    1: "Very little",
-    2: "Low",
-    3: "Moderate",
-    4: "High",
-    5: "Very high",
-}
-
-NETWORKING_VALUE = {
-    1: "Nothing",
-    2: "Very limited",
-    3: "Some",
-    4: "Good",
-    5: "Very Strong",
-}
+from src.base_manager import BaseManager
+from src.rules import RuleEngine
+from src.scoring import ScoringStrategy, StandardScoringStrategy
 
 
-# check if the ai_result is valid
-def validate_ai_result(ai_result):
-    score_limit = ["career_relevance", "learning_value", "networking_value"]
-    text_field = ["event_category", "ai_reasoning"]
+VALID_FIELDS = (
+    "event_category",
+    "career_relevance",
+    "learning_value",
+    "networking_value",
+    "ai_reasoning",
+)
+SCORE_FIELDS = ("career_relevance", "learning_value", "networking_value")
 
-    # check if score is int and within minimum and maximum
-    for key in score_limit:
-        val = ai_result.get(key)
-        if type(val) is not int or not (1 <= val <= 5):
+
+class LogicManager(BaseManager):
+    def __init__(
+        self,
+        rule_engine: RuleEngine | None = None,
+        scoring: ScoringStrategy | None = None,
+    ):
+        super().__init__(name="logic")
+        self._rule_engine = rule_engine or RuleEngine()
+        self._scoring = scoring or StandardScoringStrategy()
+
+    # -- validation -----------------------------------------------------
+    def validate_ai_result(self, ai_result: dict) -> bool:
+        if not isinstance(ai_result, dict):
             return False
-
-    # validate AI text field
-    for key in text_field:
-        val = ai_result.get(key)
-        if not isinstance(val, str) or not val.strip():
+        for field in VALID_FIELDS:
+            if field not in ai_result:
+                return False
+        if not isinstance(ai_result["event_category"], str) or not ai_result[
+            "event_category"
+        ].strip():
             return False
+        if not isinstance(ai_result["ai_reasoning"], str):
+            return False
+        for field in SCORE_FIELDS:
+            value = ai_result[field]
+            if type(value) is not int:   # rejects bool, float, str
+                return False
+            if not (1 <= value <= 5):
+                return False
+        return True
 
-    return True
+    # -- scoring --------------------------------------------------------
+    def calculate_event_value(self, ai_result: dict) -> int:
+        return self._scoring.calculate(ai_result)
 
+    def event_priority(self, value: int) -> str:
+        return self._scoring.priority_for(value)
 
-# event value calculation based on the ai_result
-def calculate_event_value(ai_result):
-    return (
-        ai_result["career_relevance"]
-        + ai_result["learning_value"]
-        + ai_result["networking_value"]
-    )
+    # -- decision -------------------------------------------------------
+    def generate_recommendation(self, ai_result: dict, workload: str) -> str:
+        return self._rule_engine.evaluate(ai_result, workload)
 
+    def generate_reason(self, recommendation: str, workload: str) -> str:
+        if recommendation == "ATTEND":
+            if workload == "Low":
+                return "High value and your workload is manageable — go for it."
+            return "Strong value; your workload is manageable enough to attend."
+        if recommendation == "MAYBE":
+            if workload == "High":
+                return "Valuable event, but heavy commitments — consider carefully."
+            return "Worth considering; weigh against your other plans."
+        return "Low overall value relative to your workload — likely skip."
 
-# categorise event value
-def event_priority(event_value):
-    if event_value >= 11:
-        priority = "High"
-    elif 7 <= event_value <= 10:
-        priority = "Medium"
-    else:
-        priority = "Low"
-    return priority
+    # -- orchestration --------------------------------------------------
+    def generate_summary(self, ai_result: dict, workload: str):
+        if not self.validate_ai_result(ai_result):
+            return None, "Invalid AI response: missing or malformed fields."
+        value = self.calculate_event_value(ai_result)
+        recommendation = self.generate_recommendation(ai_result, workload)
+        summary = {
+            "event_category": ai_result["event_category"],
+            "career_relevance": ai_result["career_relevance"],
+            "learning_value": ai_result["learning_value"],
+            "networking_value": ai_result["networking_value"],
+            "ai_reasoning": ai_result["ai_reasoning"],
+            "event_value": value,
+            "priority": self.event_priority(value),
+            "recommendation": recommendation,
+            "reason": self.generate_reason(recommendation, workload),
+        }
+        return summary, None
 
+    def add_dummy_event(self) -> dict:
+        categories = [
+            "Technical Workshop",
+            "Career Talk",
+            "Networking Session",
+            "Club Activity",
+            "Hackathon",
+        ]
+        workloads = ["Low", "Medium", "High"]
+        return {
+            "event_category": random.choice(categories),
+            "career_relevance": random.randint(1, 5),
+            "learning_value": random.randint(1, 5),
+            "networking_value": random.randint(1, 5),
+            "ai_reasoning": "Dummy event generated for demonstration/testing.",
+            "event_name": "Dummy Event",
+            "event_description": "Randomly generated event (no API call).",
+            "workload": random.choice(workloads),
+        }
 
-# generate recommendation based on the ai_result and workload
-def generate_recommendation(ai_result, workload):
-    career = ai_result["career_relevance"]
-    learning = ai_result["learning_value"]
-    event_value = calculate_event_value(ai_result)
-
-    if career >= 4 and learning >= 4 and workload in ("Low", "Medium"):
-        return "ATTEND"
-
-    if event_value >= 11 and workload in ("Low", "Medium"):
-        return "ATTEND"
-
-    if event_value >= 11 and workload == "High":
-        return "MAYBE"
-
-    if event_value >= 8 and workload in ("Low", "Medium"):
-        return "MAYBE"
-
-    if event_value >= 8 and workload == "High":
-        return "SKIP"
-
-    return "SKIP"
-
-
-# main logic : generate reason based on the recommendation and workload
-def generate_reason(recommendation, workload):
-    if recommendation == "ATTEND":
-        if workload == "High":
-            return (
-                "The event offers strong overall value and is worth considering, "
-                "but make sure attending will not interfere with your current workload."
-            )
-
-        return (
-            "The event offers strong overall value and/or particularly strong "
-            "career and learning opportunities. Your workload is manageable, "
-            "making this a good opportunity to attend."
-        )
-
-    if recommendation == "MAYBE":
-        if workload == "High":
-            return (
-                "The event offers potential value, but your current workload "
-                "may limit your ability to benefit from it. Consider attending "
-                "only if you can manage your existing commitments."
-            )
-
-        return (
-            "The event offers some worthwhile opportunities, but its overall "
-            "value may not justify prioritising it over other commitments. "
-            "Consider attending if it aligns with your interests and goals."
-        )
-
-    return (
-        "The event may not offer sufficient overall value to justify the time "
-        "commitment, or your current workload may be too high. It may be better "
-        "to prioritise other opportunities or your existing commitments."
-    )
+    # -- BaseManager contract ------------------------------------------
+    def run(self) -> None:
+        # LogicManager has no interactive loop; presence satisfies the ABC.
+        return None
 
 
-def generate_summary(ai_result: dict, workload: int):
-    if not validate_ai_result(ai_result):
-        return None, "Invalid AI result. Please analyze the event again"
-
-    event_value = calculate_event_value(ai_result)
-    recommendation = generate_recommendation(ai_result, workload)
-
-    summary = {
-        "event_value": event_value,
-        "recommendation": recommendation,
-        "priority": event_priority(event_value),
-        "reason": generate_reason(recommendation, workload),
-    }
-
-    # add ai_result dict contents to summary dict contents
-    summary |= ai_result
-    return summary, None
+# ----------------------------------------------------------------------
+# Module-level wrappers (backward compatible with main.py + tests)
+# ----------------------------------------------------------------------
+_default_logic = LogicManager()
 
 
-def format_scores(career_relevance, learning_value, networking_value):
+def validate_ai_result(ai_result: dict) -> bool:
+    return _default_logic.validate_ai_result(ai_result)
+
+
+def calculate_event_value(ai_result: dict) -> int:
+    return _default_logic.calculate_event_value(ai_result)
+
+
+def event_priority(value: int) -> str:
+    return _default_logic.event_priority(value)
+
+
+def generate_recommendation(ai_result: dict, workload: str) -> str:
+    return _default_logic.generate_recommendation(ai_result, workload)
+
+
+def generate_reason(recommendation: str, workload: str) -> str:
+    return _default_logic.generate_reason(recommendation, workload)
+
+
+def generate_summary(ai_result: dict, workload: str):
+    return _default_logic.generate_summary(ai_result, workload)
+
+
+def format_scores(career: int, learning: int, networking: int) -> dict:
     return {
-        "career_relevance": f"{CAREER_RELEVANCE[career_relevance]} [{career_relevance}/5]",
-        "learning_value": f"{LEARNING_VALUE[learning_value]} [{learning_value}/5]",
-        "networking_value": f"{NETWORKING_VALUE[networking_value]} [{networking_value}/5]",
+        "career_relevance": f"{career}/5",
+        "learning_value": f"{learning}/5",
+        "networking_value": f"{networking}/5",
     }
 
 
-def add_dummy_event():
-    return {
-        "event_category": "Dummy Category",
-        "career_relevance": random.randint(1, 5),
-        "learning_value": random.randint(1, 5),
-        "networking_value": random.randint(1, 5),
-        "ai_reasoning": "Dummy AI reasoning",
-        "event_name": "Dummy Event Name",
-        "event_description": "Dummy Event Description",
-        "workload": random.choice(["Low", "Medium", "High"]),
-    }
-
-
-# TEST
-if __name__ == "__main__":
-    print(
-        generate_summary(
-            {
-                "event_category": "Technical Workshop",
-                "career_relevance": 5,
-                "learning_value": 5,
-                "networking_value": 4,
-                "ai_reasoning": "The event directly aligns with the student's ICT Software Engineering background and specific interest in AI by teaching practical production-ready RAG pipelines.",
-            },
-            1,
-        )
-    )
+def add_dummy_event() -> dict:
+    return _default_logic.add_dummy_event()
