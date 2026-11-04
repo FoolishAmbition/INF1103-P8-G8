@@ -16,6 +16,8 @@ class EventWiseApp:
         "Profile",
         "Analyse New Events",
         "View Analysed Events",
+        "Filter & Search Events",
+        "View Event Analytics & Trends",
         "Add Dummy Event",
         "Exit",
     ]
@@ -159,6 +161,14 @@ class EventWiseApp:
         """Display all analyzed events in a formatted table."""
         self._io_manager.display_event_list(self._events)
 
+    def _handle_filter_events(self) -> None:
+        """Filter and search analyzed events by recommendation, keyword, or score."""
+        self._io_manager.filter_events(self._events)
+
+    def _handle_view_analytics(self) -> None:
+        """Display summary statistics and trends for analyzed events."""
+        self._io_manager.display_analytics(self._events)
+
     def run(self) -> None:
         """Main application loop."""
         while True:
@@ -186,6 +196,12 @@ class EventWiseApp:
 
                 case "View Analysed Events":
                     self._handle_view_events()
+
+                case "Filter & Search Events":
+                    self._handle_filter_events()
+
+                case "View Event Analytics & Trends":
+                    self._handle_view_analytics()
 
 
 def main():

@@ -7,6 +7,8 @@ from rich.table import Table
 
 from src.base_manager import BaseManager
 from src.logic_manager import format_scores
+from src.event_filter import EventFilter
+from src.analytics_reporter import AnalyticsReporter
 
 
 class IOManager(BaseManager):
@@ -436,3 +438,150 @@ class IOManager(BaseManager):
                 return
 
             self.display_event_summary(selected, back_label="Return to event table")
+
+    # ------------------------------------------------------------------
+    # Event filter and search
+    # ------------------------------------------------------------------
+    def filter_events(self, events):
+        """Interactive filter and keyword search menu for events."""
+        if not events:
+            self.refresh_screen()
+            self.display_message("No analysed events found.")
+            questionary.select("Return to the main menu", choices=["Close"]).ask()
+            return
+
+        filter_engine = EventFilter(events)
+
+        while True:
+            self.refresh_screen()
+            choice = questionary.select(
+                "Filter & Search Events",
+                choices=[
+                    "Filter by Recommendation (ATTEND / MAYBE / SKIP)",
+                    "Search by Keyword",
+                    "Filter by Minimum Score",
+                    "Back",
+                ],
+            ).ask()
+
+            if choice is None or choice == "Back":
+                return
+
+            filtered = None
+            if choice.startswith("Filter by Recommendation"):
+                self.refresh_screen()
+                rec = questionary.select(
+                    "Select Recommendation:",
+                    choices=["ATTEND", "MAYBE", "SKIP", Choice(title="Cancel", value=0)],
+                ).ask()
+                if rec not in (0, None):
+                    filtered = filter_engine.filter_by_recommendation(rec)
+
+            elif choice.startswith("Search by Keyword"):
+                self.refresh_screen()
+                keyword = self._ask_text("Enter keyword to search (matches name, description, category):")
+                if keyword is not None:
+                    filtered = filter_engine.filter_by_keyword(keyword)
+
+            elif choice.startswith("Filter by Minimum Score"):
+                self.refresh_screen()
+                score_choice = questionary.select(
+                    "Select minimum score threshold:",
+                    choices=[
+                        "High Value (11+)",
+                        "Medium Value (7+)",
+                        "Custom Score",
+                        Choice(title="Cancel", value=0),
+                    ],
+                ).ask()
+
+                if score_choice == "High Value (11+)":
+                    filtered = filter_engine.filter_by_min_score(11)
+                elif score_choice == "Medium Value (7+)":
+                    filtered = filter_engine.filter_by_min_score(7)
+                elif score_choice == "Custom Score":
+                    score_str = self._ask_text("Enter minimum total score (3-15):")
+                    if score_str and score_str.isdigit():
+                        filtered = filter_engine.filter_by_min_score(int(score_str))
+
+            if filtered is not None:
+                if not filtered:
+                    self.refresh_screen()
+                    self.display_message("No matching events found.")
+                    questionary.select("Continue", choices=["Back"]).ask()
+                else:
+                    self.display_event_list(filtered)
+
+    # ------------------------------------------------------------------
+    # Analytics display
+    # ------------------------------------------------------------------
+    def display_analytics(self, events):
+        """Display summary statistics and trends using AnalyticsReporter."""
+        if not events:
+            self.refresh_screen()
+            self.display_message("No analysed events found.")
+            questionary.select("Return to the main menu", choices=["Close"]).ask()
+            return
+
+        reporter = AnalyticsReporter(events)
+        summary = reporter.generate_summary()
+        total = summary["total_events"]
+        ratio = summary["attendance_ratio"]
+        attend_pct = round(ratio * 100, 1)
+
+        self.refresh_screen()
+
+        # 1. Overview Panel
+        rec_breakdown = summary["recommendation_breakdown"]
+        overview_text = (
+            f"[bold]Total Analysed Events:[/bold] {total}\n"
+            f"[bold]Attendance Rate:[/bold] {attend_pct}% "
+            f"([green]{rec_breakdown.get('ATTEND', 0)} ATTEND[/green], "
+            f"[yellow]{rec_breakdown.get('MAYBE', 0)} MAYBE[/yellow], "
+            f"[red]{rec_breakdown.get('SKIP', 0)} SKIP[/red])"
+        )
+        self.console.print(
+            Panel(overview_text, title="[bold cyan]Event Analytics Overview[/bold cyan]", expand=False)
+        )
+
+        # 2. Category Distribution Table
+        cat_dist = summary["category_distribution"]
+        cat_table = Table(title="Category Distribution", show_lines=True)
+        cat_table.add_column("Category", style="cyan")
+        cat_table.add_column("Count", style="white")
+        cat_table.add_column("Share", style="yellow")
+        for cat, count in sorted(cat_dist.items(), key=lambda x: x[1], reverse=True):
+            pct = round((count / total) * 100, 1) if total > 0 else 0
+            cat_table.add_row(cat, str(count), f"{pct}%")
+        self.console.print(cat_table)
+
+        # 3. Workload vs Recommendation Table
+        workload_table = Table(title="Workload vs Recommendation", show_lines=True)
+        workload_table.add_column("Workload", style="cyan")
+        workload_table.add_column("ATTEND", style="green")
+        workload_table.add_column("MAYBE", style="yellow")
+        workload_table.add_column("SKIP", style="red")
+        workload_table.add_column("Total", style="white")
+
+        for wl in ("Low", "Medium", "High"):
+            counts = summary["workload_breakdown"].get(wl, {})
+            att = counts.get("ATTEND", 0)
+            may = counts.get("MAYBE", 0)
+            skp = counts.get("SKIP", 0)
+            wl_total = att + may + skp
+            workload_table.add_row(wl, str(att), str(may), str(skp), str(wl_total))
+        self.console.print(workload_table)
+
+        # 4. Average Scores Panel
+        avg = summary["average_scores"]
+        scores_text = (
+            f"Career Relevance:  {avg.get('career_relevance', 0.0)} / 5.0\n"
+            f"Learning Value:    {avg.get('learning_value', 0.0)} / 5.0\n"
+            f"Networking Value:  {avg.get('networking_value', 0.0)} / 5.0\n"
+            f"Total Event Value: {avg.get('total_value', 0.0)} / 15.0"
+        )
+        self.console.print(
+            Panel(scores_text, title="[bold magenta]Average Scores[/bold magenta]", expand=False)
+        )
+
+        questionary.select("Return to the main menu", choices=["Back"]).ask()
