@@ -15,3 +15,7 @@ class ResponseValidationError(EventWiseError):
 
 class DataCorruptionError(EventWiseError):
     """Raised when a persistence file is missing or corrupt."""
+
+
+class ValidationError(EventWiseError, ValueError):
+    """Raised when domain entities or model attributes fail validation."""

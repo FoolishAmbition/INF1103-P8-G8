@@ -50,10 +50,14 @@ class IOManager(BaseManager):
 
     @staticmethod
     def _copy_profile(profile):
-        return {
-            "field_of_study": profile["field_of_study"],
-            "interests": list(profile["interests"]),
-        }
+        if hasattr(profile, "to_dict"):
+            return profile.to_dict()
+        if isinstance(profile, dict):
+            return {
+                "field_of_study": profile.get("field_of_study", ""),
+                "interests": list(profile.get("interests", [])),
+            }
+        return {"field_of_study": "", "interests": []}
 
     def _ask_text(self, message, default=""):
         value = questionary.text(
@@ -305,8 +309,16 @@ class IOManager(BaseManager):
     ):
         self.refresh_screen()
 
-        priority = event_summary.get("priority", "No priority")
-        recommendation = event_summary.get("recommendation", "No recommendation")
+        # Support both EventRecord domain entities and dictionaries
+        if hasattr(event_summary, "to_dict"):
+            data = event_summary.to_dict()
+        elif isinstance(event_summary, dict):
+            data = event_summary
+        else:
+            data = {}
+
+        priority = data.get("priority", "No priority")
+        recommendation = data.get("recommendation", "No recommendation")
         rec_style = {
             "ATTEND": "bold green",
             "MAYBE": "bold yellow",
@@ -316,15 +328,15 @@ class IOManager(BaseManager):
         # Event info
         self.console.rule("[bold cyan]Event[/bold cyan]", align="left", style="cyan")
         self.console.print(
-            f'[bold]{event_summary.get("event_name")}[/bold]\n'
-            f'{event_summary.get("event_description")}\n'
+            f'[bold]{data.get("event_name", "Unnamed event")}[/bold]\n'
+            f'{data.get("event_description", "")}\n'
         )
 
         # Score breakdown
         scores = format_scores(
-            event_summary["career_relevance"],
-            event_summary["learning_value"],
-            event_summary["networking_value"],
+            data.get("career_relevance", 0),
+            data.get("learning_value", 0),
+            data.get("networking_value", 0),
         )
         self.console.rule(
             "[bold magenta]Score Breakdown[/bold magenta]",
@@ -343,14 +355,14 @@ class IOManager(BaseManager):
             align="left",
             style=rec_style,
         )
-        self.console.print(f"{event_summary.get('reason', 'No reason provided.')}\n")
+        self.console.print(f"{data.get('reason', 'No reason provided.')}\n")
 
         # AI reasoning
         self.console.rule(
             "[bold blue]AI Reasoning[/bold blue]", align="left", style="blue"
         )
         self.console.print(
-            f"{event_summary.get('ai_reasoning', 'No AI reasoning provided.')}\n"
+            f"{data.get('ai_reasoning', 'No AI reasoning provided.')}\n"
         )
 
         questionary.select(back_label, choices=["Back"]).ask()
@@ -371,21 +383,28 @@ class IOManager(BaseManager):
         table.add_column("Networking", style="white")
 
         for i, event in enumerate(events, start=1):
-            rec = str(event.get("recommendation", "Unknown"))
+            if hasattr(event, "to_dict"):
+                item = event.to_dict()
+            elif isinstance(event, dict):
+                item = event
+            else:
+                item = {}
+
+            rec = str(item.get("recommendation", "Unknown"))
             rec_style = self._style_for(rec.upper(), self.RECOMMENDATION_LEVELS)
 
-            priority = str(event.get("priority", "Unknown"))
+            priority = str(item.get("priority", "Unknown"))
             priority_style = self._style_for(priority, self.PRIORITY_LEVELS)
 
             table.add_row(
                 str(i),
-                str(event.get("event_name", "Unnamed event")),
+                str(item.get("event_name", "Unnamed event")),
                 f"[{priority_style}]{priority}[/{priority_style}]",
                 f"[{rec_style}]{rec}[/{rec_style}]",
-                str(event.get("reason", "No reason provided")),
-                str(event.get("career_relevance", 0)),
-                str(event.get("learning_value", 0)),
-                str(event.get("networking_value", 0)),
+                str(item.get("reason", "No reason provided")),
+                str(item.get("career_relevance", 0)),
+                str(item.get("learning_value", 0)),
+                str(item.get("networking_value", 0)),
             )
 
         return table
@@ -401,13 +420,12 @@ class IOManager(BaseManager):
             self.refresh_screen()
             self.console.print(self._build_event_table(events))
 
-            choices = [
-                Choice(
-                    title=f"{i}. {event.get('event_name', 'Unnamed event')}",
-                    value=event,
+            choices = []
+            for i, event in enumerate(events, start=1):
+                name = getattr(event, "event_name", None) or (
+                    event.get("event_name") if isinstance(event, dict) else "Unnamed event"
                 )
-                for i, event in enumerate(events, start=1)
-            ]
+                choices.append(Choice(title=f"{i}. {name}", value=event))
             choices.append("Back")
 
             selected = questionary.select(

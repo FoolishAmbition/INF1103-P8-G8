@@ -99,13 +99,6 @@ class StudentProfile(Entity):
             "interests": list(self.interests),
         }
 
-    # Lets dictionary-like access like profile["field_of_study"] or profile.get(...) work
-    def __getitem__(self, key):
-        return self.to_dict()[key]
-
-    def get(self, key, default=None):
-        return self.to_dict().get(key, default)
-
     @classmethod
     def from_dict(cls, data):
         if not data:
@@ -234,22 +227,17 @@ class EventRecord(Entity):
         self.priority = priority
         self.event_value = event_value
 
-        # Copies of the individual scores (None if there are no scores)
-        if ai_scores is not None:
-            self.career_relevance = ai_scores.career_relevance
-            self.learning_value = ai_scores.learning_value
-            self.networking_value = ai_scores.networking_value
-        else:
-            self.career_relevance = None
-            self.learning_value = None
-            self.networking_value = None
+    @property
+    def career_relevance(self):
+        return self.ai_scores.career_relevance if self.ai_scores else None
 
-    # Lets old code like record["event_name"] or record.get("event_name") still work
-    def __getitem__(self, key):
-        return self.to_dict()[key]
+    @property
+    def learning_value(self):
+        return self.ai_scores.learning_value if self.ai_scores else None
 
-    def get(self, key, default=None):
-        return self.to_dict().get(key, default)
+    @property
+    def networking_value(self):
+        return self.ai_scores.networking_value if self.ai_scores else None
 
     def to_dict(self):
         if self.ai_scores is not None:
