@@ -6,7 +6,7 @@ from src.exceptions import APIError
 
 
 class GeminiClient:
-    def __init__(self, api_key: str | None = None, model_name: str = "gemini-2.5-flash"):
+    def __init__(self, api_key: str | None = None, model_name: str = "gemini-3.8-flash"):
         self._api_key = api_key or os.getenv("API_KEY", "")
         self._model_name = model_name
 

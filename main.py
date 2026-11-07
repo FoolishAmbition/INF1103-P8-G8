@@ -7,6 +7,7 @@ from src.data_manager import DataManager
 from src.io_manager import IOManager
 from src.logic_manager import LogicManager
 from src.models import EventRecord, StudentProfile
+from src.mongodb_storage import MongoStorage
 
 
 class EventWiseApp:
@@ -26,7 +27,10 @@ class EventWiseApp:
         self._io_manager = IOManager()
         self._ai_manager = AIManager()
         self._logic_manager = LogicManager()
-        self._data_manager = DataManager()
+
+        # Connect EventWise to MongoDB.
+        self._mongo_storage = MongoStorage()
+        self._data_manager = DataManager(storage=self._mongo_storage)
 
         # Load persisted profile and events into domain entities
         self._profile = self._load_profile()
@@ -80,6 +84,9 @@ class EventWiseApp:
             )
 
         self._io_manager.display_message("Goodbye!")
+
+        # Close the MongoDB connection.
+        self._mongo_storage.close()
 
     def _handle_profile(self) -> None:
         """Allow user to view and edit their student profile."""
