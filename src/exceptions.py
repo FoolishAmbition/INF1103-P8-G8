@@ -19,3 +19,6 @@ class DataCorruptionError(EventWiseError):
 
 class ValidationError(EventWiseError, ValueError):
     """Raised when domain entities or model attributes fail validation."""
+
+class DatabaseError(EventWiseError):
+    """Raised when a database operation or connection fails."""

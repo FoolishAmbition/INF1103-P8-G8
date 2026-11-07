@@ -3,3 +3,4 @@ google-genai
 questionary
 rich
 python-dotenv
+pymongo
