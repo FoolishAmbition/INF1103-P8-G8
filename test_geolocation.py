@@ -1,4 +1,4 @@
-"""Offline tests for GeoLocation input validation."""
+"""Offline tests for postal validation and mocked OneMap HTTP responses."""
 
 import unittest
 import copy
@@ -48,34 +48,49 @@ class TestOneMapTransitService(unittest.TestCase):
         self.departure = datetime(2026, 11, 12, 16, tzinfo=SINGAPORE_TIMEZONE)
         self.start = datetime(2026, 11, 12, 16, 1, 45, tzinfo=SINGAPORE_TIMEZONE)
         self.end = datetime(2026, 11, 12, 16, 25, tzinfo=SINGAPORE_TIMEZONE)
-        self.route = {"plan": {"itineraries": [{
+        itinerary = {
             "duration": 1395,
             "startTime": self.start.timestamp() * 1000,
             "endTime": self.end.timestamp() * 1000,
             "legs": [{"distance": 450.9}, {"distance": 4000}],
-        }]}}
+        }
+        self.route = {"plan": {"itineraries": [itinerary]}}
 
     def response(self, data, status=200, raw=False):
+        """Build a fake response for the service's with statement and read call."""
         response = Mock()
         response.status = status
-        response.read.return_value = data if raw else json.dumps(data).encode("utf-8")
+        if raw:
+            response.read.return_value = data
+        else:
+            response.read.return_value = json.dumps(data).encode("utf-8")
         response.__enter__ = Mock(return_value=response)
         response.__exit__ = Mock(return_value=False)
         return response
 
     def lookup(self, postal):
-        return {"results": [{"POSTAL": postal, "LATITUDE": "1.3", "LONGITUDE": "103.8"}]}
+        location = {
+            "POSTAL": postal,
+            "LATITUDE": "1.3",
+            "LONGITUDE": "103.8",
+        }
+        return {"results": [location]}
 
     def prepare(self, route=None):
+        """Queue two postal search responses followed by one routing response."""
+        if route is None:
+            route = self.route
         self.opener.side_effect = [
             self.response(self.lookup("012345")),
             self.response(self.lookup("654321")),
-            self.response(self.route if route is None else route),
+            self.response(route),
         ]
 
     def get_route(self, departure=None):
+        if departure is None:
+            departure = self.departure
         return self.service.get_transit_route(
-            "012345", "654321", self.departure if departure is None else departure
+            "012345", "654321", departure
         )
 
     def assert_error(self, code, action):
@@ -115,7 +130,10 @@ class TestOneMapTransitService(unittest.TestCase):
             "routeType": ["pt"], "mode": ["TRANSIT"], "date": ["11-12-2026"],
             "time": ["16:00:00"], "maxWalkDistance": ["1000"], "numItineraries": ["1"],
         })
-        paths = [urlparse(call.args[0].full_url).path for call in self.opener.call_args_list]
+        paths = []
+        for call in self.opener.call_args_list:
+            request_path = urlparse(call.args[0].full_url).path
+            paths.append(request_path)
         self.assertEqual(paths, ["/api/common/elastic/search"] * 2 + ["/api/public/routingsvc/route"])
 
     def test_utc_departure_converts_to_next_singapore_date(self):
@@ -133,15 +151,17 @@ class TestOneMapTransitService(unittest.TestCase):
             ("012345", "654321", "2026-11-12"),
         ]
         for args in cases:
-            with self.subTest(args=args), self.assertRaises(ValidationError):
-                self.service.get_transit_route(*args)
+            with self.subTest(args=args):
+                home_postal, destination_postal, departure = args
+                with self.assertRaises(ValidationError):
+                    self.service.get_transit_route(home_postal, destination_postal, departure)
         self.opener.assert_not_called()
 
     def test_missing_token_sends_no_requests(self):
         service = GeoLocationService(token=" ", opener=self.opener)
-        self.assert_error("AUTHENTICATION_ERROR", lambda: service.get_transit_route(
-            "012345", "654321", self.departure
-        ))
+        with self.assertRaises(GeoLocationError) as caught:
+            service.get_transit_route("012345", "654321", self.departure)
+        self.assertEqual(caught.exception.code, "AUTHENTICATION_ERROR")
         self.opener.assert_not_called()
 
     def test_token_can_come_from_environment(self):
@@ -154,14 +174,19 @@ class TestOneMapTransitService(unittest.TestCase):
 
     def test_invalid_timeout_is_rejected(self):
         for timeout in (0, -1, True, "25", float("nan"), float("inf")):
-            with self.subTest(timeout=timeout), self.assertRaises(ValidationError):
-                GeoLocationService(token="fake", timeout_seconds=timeout)
+            with self.subTest(timeout=timeout):
+                with self.assertRaises(ValidationError):
+                    GeoLocationService(token="fake", timeout_seconds=timeout)
 
     def test_unrelated_search_result_is_ignored(self):
         self.prepare()
         first = self.lookup("012345")
         first["results"].insert(0, {"POSTAL": "999999"})
-        self.opener.side_effect = [self.response(first), self.response(self.lookup("654321")), self.response(self.route)]
+        self.opener.side_effect = [
+            self.response(first),
+            self.response(self.lookup("654321")),
+            self.response(self.route),
+        ]
         self.assertAlmostEqual(self.get_route().distance_km, 4.4509)
 
     def test_nonexistent_postal_stops_before_routing(self):
@@ -173,20 +198,37 @@ class TestOneMapTransitService(unittest.TestCase):
                 self.assertEqual(self.opener.call_count, 1)
 
     def test_unresolved_destination_stops_before_routing(self):
-        self.opener.side_effect = [self.response(self.lookup("012345")), self.response({"results": []})]
+        self.opener.side_effect = [
+            self.response(self.lookup("012345")),
+            self.response({"results": []}),
+        ]
         self.assert_error("LOCATION_NOT_FOUND", self.get_route)
         self.assertEqual(self.opener.call_count, 2)
 
     def test_malformed_search_results_are_rejected(self):
-        for data in ({}, {"results": None}, {"results": {}}, {"results": [None]}, {"results": [{"POSTAL": "012345"}]}):
+        invalid_responses = (
+            {},
+            {"results": None},
+            {"results": {}},
+            {"results": [None]},
+            {"results": [{"POSTAL": "012345"}]},
+        )
+        for data in invalid_responses:
             with self.subTest(data=data):
                 self.opener.side_effect = [self.response(data)]
                 self.assert_error("INVALID_RESPONSE", self.get_route)
 
     def test_invalid_coordinates_are_rejected(self):
-        for field, value in (("LATITUDE", None), ("LATITUDE", "abc"), ("LATITUDE", "nan"),
-                             ("LONGITUDE", "inf"), ("LATITUDE", 91), ("LONGITUDE", 181),
-                             ("LATITUDE", True)):
+        invalid_coordinates = (
+            ("LATITUDE", None),
+            ("LATITUDE", "abc"),
+            ("LATITUDE", "nan"),
+            ("LONGITUDE", "inf"),
+            ("LATITUDE", 91),
+            ("LONGITUDE", 181),
+            ("LATITUDE", True),
+        )
+        for field, value in invalid_coordinates:
             with self.subTest(field=field, value=value):
                 data = self.lookup("012345")
                 data["results"][0][field] = value
@@ -194,33 +236,50 @@ class TestOneMapTransitService(unittest.TestCase):
                 self.assert_error("INVALID_RESPONSE", self.get_route)
 
     def test_http_failures_are_classified_at_search_and_route(self):
-        for status, code in ((401, "AUTHENTICATION_ERROR"), (403, "AUTHENTICATION_ERROR"),
-                             (429, "QUOTA_EXCEEDED"), (500, "PROVIDER_ERROR")):
+        http_failures = (
+            (401, "AUTHENTICATION_ERROR"),
+            (403, "AUTHENTICATION_ERROR"),
+            (429, "QUOTA_EXCEEDED"),
+            (500, "PROVIDER_ERROR"),
+        )
+        for status, code in http_failures:
             for stage in (0, 2):
                 with self.subTest(status=status, stage=stage):
-                    prefix = [self.response(self.lookup("012345")), self.response(self.lookup("654321"))][:stage]
+                    prefix = []
+                    if stage == 2:
+                        prefix.append(self.response(self.lookup("012345")))
+                        prefix.append(self.response(self.lookup("654321")))
                     error = HTTPError("https://example.invalid/private", status, "private", {}, io.BytesIO(b"private"))
                     self.opener.side_effect = prefix + [error]
                     caught = self.assert_error(code, self.get_route)
-                    self.assertNotIn("example.invalid/private", "".join(traceback.format_exception(caught)))
+                    error_traceback = "".join(traceback.format_exception(caught))
+                    self.assertNotIn("example.invalid/private", error_traceback)
 
     def test_non_200_response_status_is_checked(self):
         self.opener.side_effect = [self.response({}, status=429)]
         self.assert_error("QUOTA_EXCEEDED", self.get_route)
 
     def test_network_and_timeout_errors_are_safe(self):
-        for error, code in ((TimeoutError("private"), "TIMEOUT"),
-                            (URLError(TimeoutError("private")), "TIMEOUT"),
-                            (URLError("private"), "NETWORK_ERROR"),
-                            (ConnectionError("private"), "NETWORK_ERROR")):
+        network_failures = (
+            (TimeoutError("private"), "TIMEOUT"),
+            (URLError(TimeoutError("private")), "TIMEOUT"),
+            (URLError("private"), "NETWORK_ERROR"),
+            (ConnectionError("private"), "NETWORK_ERROR"),
+        )
+        for error, code in network_failures:
             with self.subTest(code=code):
                 self.opener.side_effect = [error]
                 self.assert_error(code, self.get_route)
 
     def test_http_200_provider_errors_override_result_shaped_data(self):
-        cases = (("Invalid token", "AUTHENTICATION_ERROR"), ("API limit exceeded", "QUOTA_EXCEEDED"),
-                 ("Unsupported mode", "UNSUPPORTED_MODE"), ("No route found", "NO_ROUTE"),
-                 ({"id": "PATH_NOT_FOUND"}, "NO_ROUTE"), ("Other rejection", "PROVIDER_ERROR"))
+        cases = (
+            ("Invalid token", "AUTHENTICATION_ERROR"),
+            ("API limit exceeded", "QUOTA_EXCEEDED"),
+            ("Unsupported mode", "UNSUPPORTED_MODE"),
+            ("No route found", "NO_ROUTE"),
+            ({"id": "PATH_NOT_FOUND"}, "NO_ROUTE"),
+            ("Other rejection", "PROVIDER_ERROR"),
+        )
         for message, code in cases:
             for field in ("error", "message"):
                 with self.subTest(message=message, field=field):
@@ -242,28 +301,49 @@ class TestOneMapTransitService(unittest.TestCase):
                 self.assert_error("NO_ROUTE", self.get_route)
 
     def test_malformed_route_structure_is_rejected(self):
-        for data in ({"plan": []}, {"plan": {}}, {"plan": {"itineraries": {}}},
-                     {"plan": {"itineraries": [None]}}):
+        invalid_responses = (
+            {"plan": []},
+            {"plan": {}},
+            {"plan": {"itineraries": {}}},
+            {"plan": {"itineraries": [None]}},
+        )
+        for data in invalid_responses:
             with self.subTest(data=data):
                 self.prepare(data)
                 self.assert_error("INVALID_RESPONSE", self.get_route)
 
     def test_invalid_itinerary_fields_are_rejected(self):
-        cases = (("duration", None), ("duration", 0), ("duration", -1), ("duration", True),
-                 ("duration", "1395"), ("duration", float("nan")), ("duration", float("inf")),
-                 ("duration", 10 ** 400),
-                 ("startTime", None), ("startTime", True), ("startTime", 1e100),
-                 ("endTime", None), ("endTime", 0), ("endTime", float("inf")),
-                 ("legs", []), ("legs", None), ("legs", [None]),
-                 ("legs", [{"distance": 10}, {}]),
-                 ("legs", [{"distance": -1}]), ("legs", [{"distance": 0}]),
-                 ("legs", [{"distance": True}]), ("legs", [{"distance": "20"}]),
-                 ("legs", [{"distance": float("nan")}]),
-                 ("legs", [{"distance": float("inf")}]))
+        cases = (
+            ("duration", None),
+            ("duration", 0),
+            ("duration", -1),
+            ("duration", True),
+            ("duration", "1395"),
+            ("duration", float("nan")),
+            ("duration", float("inf")),
+            ("duration", 10 ** 400),
+            ("startTime", None),
+            ("startTime", True),
+            ("startTime", 1e100),
+            ("endTime", None),
+            ("endTime", 0),
+            ("endTime", float("inf")),
+            ("legs", []),
+            ("legs", None),
+            ("legs", [None]),
+            ("legs", [{"distance": 10}, {}]),
+            ("legs", [{"distance": -1}]),
+            ("legs", [{"distance": 0}]),
+            ("legs", [{"distance": True}]),
+            ("legs", [{"distance": "20"}]),
+            ("legs", [{"distance": float("nan")}]),
+            ("legs", [{"distance": float("inf")}]),
+        )
         for field, value in cases:
             with self.subTest(field=field, value=value):
                 data = copy.deepcopy(self.route)
-                data["plan"]["itineraries"][0][field] = value
+                itinerary = data["plan"]["itineraries"][0]
+                itinerary[field] = value
                 self.prepare(data)
                 self.assert_error("INVALID_RESPONSE", self.get_route)
 
