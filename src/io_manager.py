@@ -9,6 +9,8 @@ from src.base_manager import BaseManager
 from src.logic_manager import format_scores
 from src.event_filter import EventFilter
 from src.analytics_reporter import AnalyticsReporter
+from src.exceptions import ValidationError
+from src.geolocation import validate_singapore_postal_code
 
 
 class IOManager(BaseManager):
@@ -48,7 +50,7 @@ class IOManager(BaseManager):
 
     @staticmethod
     def _empty_profile():
-        return {"field_of_study": "", "interests": []}
+        return {"field_of_study": "", "interests": [], "home_postal_code": ""}
 
     @staticmethod
     def _copy_profile(profile):
@@ -58,8 +60,31 @@ class IOManager(BaseManager):
             return {
                 "field_of_study": profile.get("field_of_study", ""),
                 "interests": list(profile.get("interests", [])),
+                "home_postal_code": profile.get("home_postal_code") or "",
             }
-        return {"field_of_study": "", "interests": []}
+        return IOManager._empty_profile()
+
+    @staticmethod
+    def _validate_home_postal_code(text):
+        """Allow an empty optional postal code or a valid six-digit string."""
+        postal_code = text.strip()
+        if postal_code == "":
+            return True
+        try:
+            validate_singapore_postal_code(postal_code)
+        except ValidationError:
+            return "Enter six digits, or leave blank to clear your home postal code."
+        return True
+
+    def _ask_home_postal_code(self, current_postal_code):
+        value = questionary.text(
+            "Home postal code (six digits, optional; leave blank to clear)",
+            default=current_postal_code,
+            validate=self._validate_home_postal_code,
+        ).ask()
+        if value is None:
+            return None
+        return value.strip()
 
     def _ask_text(self, message, default=""):
         value = questionary.text(
@@ -129,6 +154,7 @@ class IOManager(BaseManager):
             interests_label = (
                 ", ".join(draft["interests"]) if draft["interests"] else "(not set)"
             )
+            postal_label = draft["home_postal_code"] or "(not set)"
 
             self.refresh_screen(status, is_error)
             status = None
@@ -139,6 +165,7 @@ class IOManager(BaseManager):
                 choices=[
                     f"Field of study: {field_label}",
                     f"Interests:      {interests_label}",
+                    f"Home postal code: {postal_label}",
                     "Save",
                     "Cancel",
                 ],
@@ -158,6 +185,12 @@ class IOManager(BaseManager):
 
             elif choice.startswith("Interests:"):
                 draft["interests"] = self._collect_interests(draft["interests"])
+
+            elif choice.startswith("Home postal code:"):
+                self.refresh_screen()
+                new_value = self._ask_home_postal_code(draft["home_postal_code"])
+                if new_value is not None:
+                    draft["home_postal_code"] = new_value
 
             elif choice == "Save":
                 if not draft["field_of_study"].strip() or not draft["interests"]:

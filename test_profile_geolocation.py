@@ -1,0 +1,242 @@
+"""Offline tests for home postal codes in profiles, editing and JSON storage."""
+
+import io
+import unittest
+from tempfile import TemporaryDirectory
+from unittest.mock import Mock, patch
+
+from rich.console import Console
+
+from main import EventWiseApp
+from src.exceptions import ValidationError
+from src.io_manager import IOManager
+from src.models import StudentProfile
+from src.storage import JsonStorage
+
+
+class TestProfilePostalCode(unittest.TestCase):
+    def test_old_constructor_remains_supported(self):
+        profile = StudentProfile("Software Engineering", ["Python"])
+        self.assertEqual(profile.home_postal_code, "")
+        self.assertEqual(profile.field_of_study, "Software Engineering")
+        self.assertEqual(profile.interests, ["Python"])
+
+    def test_older_saved_profile_loads_without_postal(self):
+        profile = StudentProfile.from_dict({
+            "field_of_study": "Software Engineering",
+            "interests": ["Python"],
+        })
+        self.assertEqual(profile.home_postal_code, "")
+        self.assertFalse(profile.is_empty())
+
+    def test_missing_profile_loads_empty(self):
+        for data in (None, {}):
+            with self.subTest(data=data):
+                profile = StudentProfile.from_dict(data)
+                self.assertEqual(profile.home_postal_code, "")
+                self.assertTrue(profile.is_empty())
+
+    def test_postal_string_preserves_leading_zero(self):
+        profile = StudentProfile("Software Engineering", ["Python"], "012345")
+        self.assertEqual(profile.home_postal_code, "012345")
+        self.assertEqual(profile.to_dict()["home_postal_code"], "012345")
+
+    def test_empty_or_null_postal_is_optional(self):
+        for postal_code in ("", None):
+            with self.subTest(postal_code=postal_code):
+                profile = StudentProfile.from_dict({"home_postal_code": postal_code})
+                self.assertEqual(profile.home_postal_code, "")
+
+    def test_invalid_postals_are_rejected_during_construction_and_loading(self):
+        invalid_postals = (123456, True, "12345", "1234567", "ABC123", "１２３４５６", " 012345 ")
+        for postal_code in invalid_postals:
+            with self.subTest(postal_code=postal_code):
+                with self.assertRaises(ValidationError):
+                    StudentProfile(home_postal_code=postal_code)
+                with self.assertRaises(ValidationError):
+                    StudentProfile.from_dict({"home_postal_code": postal_code})
+
+    def test_profile_dictionary_round_trip(self):
+        original = StudentProfile("Software Engineering", ["Python"], "012345")
+        restored = StudentProfile.from_dict(original.to_dict())
+        self.assertEqual(restored, original)
+        self.assertEqual(restored.home_postal_code, "012345")
+
+    def test_postal_survives_actual_json_save_and_reload(self):
+        original = StudentProfile("Software Engineering", ["Python"], "012345")
+        with TemporaryDirectory(prefix="eventwise-profile-test-") as directory:
+            storage = JsonStorage(directory)
+            storage.save("profile", original.to_dict())
+            reloaded_storage = JsonStorage(directory)
+            restored = StudentProfile.from_dict(reloaded_storage.load("profile"))
+        self.assertEqual(restored, original)
+        self.assertEqual(restored.home_postal_code, "012345")
+
+    def test_older_json_profile_can_be_loaded_and_saved(self):
+        with TemporaryDirectory(prefix="eventwise-profile-test-") as directory:
+            storage = JsonStorage(directory)
+            storage.save("profile", {"field_of_study": "Software Engineering", "interests": ["Python"]})
+            profile = StudentProfile.from_dict(storage.load("profile"))
+            storage.save("profile", profile.to_dict())
+            restored = StudentProfile.from_dict(storage.load("profile"))
+        self.assertEqual(restored.field_of_study, "Software Engineering")
+        self.assertEqual(restored.interests, ["Python"])
+        self.assertEqual(restored.home_postal_code, "")
+
+    def test_postal_does_not_replace_existing_profile_fields(self):
+        profile = StudentProfile(home_postal_code="012345")
+        self.assertTrue(profile.is_empty())
+        complete_profile = StudentProfile("Software Engineering", ["Python"])
+        self.assertFalse(complete_profile.is_empty())
+
+    def test_dictionary_copy_keeps_postal_and_separate_interests(self):
+        original = StudentProfile("Software Engineering", ["Python"], "012345").to_dict()
+        draft = IOManager._copy_profile(original)
+        draft["interests"].append("Testing")
+        draft["home_postal_code"] = "654321"
+        self.assertEqual(original["interests"], ["Python"])
+        self.assertEqual(original["home_postal_code"], "012345")
+
+    def test_entity_copy_keeps_postal_and_separate_interests(self):
+        original = StudentProfile("Software Engineering", ["Python"], "012345")
+        draft = IOManager._copy_profile(original)
+        self.assertEqual(draft["home_postal_code"], "012345")
+        draft["interests"].append("Testing")
+        self.assertEqual(original.interests, ["Python"])
+
+    def test_empty_and_old_dictionary_copies_have_postal_field(self):
+        for profile in (None, {}, {"field_of_study": "Software Engineering", "interests": ["Python"]}):
+            with self.subTest(profile=profile):
+                self.assertEqual(IOManager._copy_profile(profile)["home_postal_code"], "")
+
+
+class TestProfilePostalEditor(unittest.TestCase):
+    def setUp(self):
+        self.output = io.StringIO()
+        self.manager = IOManager(console=Console(file=self.output))
+        self.manager.refresh_screen = Mock()
+        self.profile = StudentProfile("Software Engineering", ["Python"], "012345")
+
+    def test_prompt_validation_accepts_optional_and_valid_postals(self):
+        for value in ("", "   ", "012345", " 012345 "):
+            with self.subTest(value=value):
+                self.assertIs(self.manager._validate_home_postal_code(value), True)
+        for value in ("12345", "ABC123", "１２３４５６"):
+            with self.subTest(value=value):
+                result = self.manager._validate_home_postal_code(value)
+                self.assertIsInstance(result, str)
+                self.assertNotIn(value, result)
+
+    @patch("src.io_manager.questionary.text")
+    def test_postal_prompt_uses_validator_and_preserves_zero(self, text_prompt):
+        text_prompt.return_value.ask.return_value = " 012345 "
+        self.assertEqual(self.manager._ask_home_postal_code("654321"), "012345")
+        arguments = text_prompt.call_args.kwargs
+        self.assertEqual(arguments["default"], "654321")
+        self.assertEqual(arguments["validate"], self.manager._validate_home_postal_code)
+
+    @patch("src.io_manager.questionary.text")
+    def test_cancelled_postal_prompt_returns_none(self, text_prompt):
+        text_prompt.return_value.ask.return_value = None
+        self.assertIsNone(self.manager._ask_home_postal_code("012345"))
+
+    @patch("src.io_manager.questionary.text")
+    @patch("src.io_manager.questionary.select")
+    def test_save_changed_postal(self, select_prompt, text_prompt):
+        select_prompt.return_value.ask.side_effect = ["Home postal code: 012345", "Save"]
+        text_prompt.return_value.ask.return_value = "654321"
+        updated = self.manager.collect_profile(self.profile)
+        restored = StudentProfile.from_dict(updated)
+        self.assertEqual(restored.home_postal_code, "654321")
+        self.assertEqual(self.profile.home_postal_code, "012345")
+        self.assertEqual(restored.field_of_study, self.profile.field_of_study)
+        self.assertEqual(restored.interests, self.profile.interests)
+
+    @patch("src.io_manager.questionary.text")
+    @patch("src.io_manager.questionary.select")
+    def test_blank_input_clears_postal(self, select_prompt, text_prompt):
+        select_prompt.return_value.ask.side_effect = ["Home postal code: 012345", "Save"]
+        text_prompt.return_value.ask.return_value = ""
+        updated = self.manager.collect_profile(self.profile)
+        self.assertEqual(StudentProfile.from_dict(updated).home_postal_code, "")
+
+    @patch("src.io_manager.questionary.text")
+    @patch("src.io_manager.questionary.select")
+    def test_cancelled_input_keeps_postal(self, select_prompt, text_prompt):
+        select_prompt.return_value.ask.side_effect = ["Home postal code: 012345", "Save"]
+        text_prompt.return_value.ask.return_value = None
+        updated = self.manager.collect_profile(self.profile)
+        self.assertEqual(updated["home_postal_code"], "012345")
+
+    @patch("src.io_manager.questionary.text")
+    @patch("src.io_manager.questionary.select")
+    def test_cancel_edit_discards_draft(self, select_prompt, text_prompt):
+        for cancel_choice in ("Cancel", None):
+            with self.subTest(cancel_choice=cancel_choice):
+                select_prompt.return_value.ask.side_effect = ["Home postal code: 012345", cancel_choice]
+                text_prompt.return_value.ask.return_value = "654321"
+                result = self.manager.collect_profile(self.profile)
+                self.assertIs(result, self.profile)
+                self.assertEqual(self.profile.home_postal_code, "012345")
+
+    @patch("src.io_manager.questionary.select")
+    def test_old_profile_can_save_without_postal(self, select_prompt):
+        select_prompt.return_value.ask.return_value = "Save"
+        old_profile = {"field_of_study": "Software Engineering", "interests": ["Python"]}
+        updated = self.manager.collect_profile(old_profile)
+        self.assertEqual(updated["home_postal_code"], "")
+
+    @patch("src.io_manager.questionary.select")
+    def test_existing_save_requirements_are_enforced(self, select_prompt):
+        select_prompt.return_value.ask.side_effect = ["Save", "Cancel"]
+        empty_profile = StudentProfile(home_postal_code="012345")
+        result = self.manager.collect_profile(empty_profile)
+        self.assertIs(result, empty_profile)
+        self.manager.refresh_screen.assert_called_with(
+            "Field of study and at least one interest are required.", True
+        )
+
+
+class TestProfilePostalAppFlow(unittest.TestCase):
+    @patch("main.DataManager")
+    def test_analysis_receives_only_study_and_interests(self, data_manager):
+        profile = StudentProfile("Software Engineering", ["Python"], "012345")
+        data_manager.return_value.load_profile.return_value = profile.to_dict()
+        data_manager.return_value.load_events.return_value = []
+        app = EventWiseApp()
+        app._io_manager = Mock()
+        app._io_manager.collect_event_info.return_value = ("Workshop", "Learn Python", "Low")
+        app._ai_manager = Mock()
+        app._ai_manager.analyze_event.return_value = (None, "Offline test")
+
+        app._handle_analyse_event()
+
+        app._ai_manager.analyze_event.assert_called_once_with(
+            {"field_of_study": "Software Engineering", "interests": ["Python"]},
+            "Workshop",
+            "Learn Python",
+        )
+        self.assertEqual(app.profile.home_postal_code, "012345")
+
+    @patch("main.DataManager")
+    def test_app_profile_save_and_exit_keep_postal(self, data_manager):
+        data_manager.return_value.load_profile.return_value = {
+            "field_of_study": "Software Engineering",
+            "interests": ["Python"],
+        }
+        data_manager.return_value.load_events.return_value = []
+        app = EventWiseApp()
+        app._io_manager = Mock()
+        updated = StudentProfile("Software Engineering", ["Python"], "012345").to_dict()
+        app._io_manager.collect_profile.return_value = updated
+
+        app._handle_profile()
+        app._handle_exit()
+
+        self.assertEqual(app.profile.home_postal_code, "012345")
+        data_manager.return_value.save_profile.assert_called_once_with(updated)
+        self.assertEqual(app._status, "Profile saved!")
+
+
+if __name__ == "__main__":
+    unittest.main()

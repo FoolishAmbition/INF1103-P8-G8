@@ -106,8 +106,13 @@ class EventWiseApp:
         event_name, event_description, workload = event_info
 
         # Check AI result
+        # Home postal code is used for travel routing. Gemini needs study and interests.
+        analysis_profile = {
+            "field_of_study": self._profile.field_of_study,
+            "interests": list(self._profile.interests),
+        }
         ai_result, error_message = self._ai_manager.analyze_event(
-            self._profile.to_dict(), event_name, event_description
+            analysis_profile, event_name, event_description
         )
         if ai_result is None:
             self._status = error_message

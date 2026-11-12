@@ -2,7 +2,7 @@
 
 **Baseline:** `oop_andrew` commit `2a08f807248949501946d2dc00a29ad960971e2b`  
 **Created:** 10 November 2026  
-**Status:** Postal validation and Step 3 transit service are committed. Step 4 departure and feasibility calculations are implemented and verified offline, with changes ready for review. Live service verification is pending. OneMap API pricing and numeric usage limits remain unconfirmed. Step 5 profile integration is next.
+**Status:** Steps 2–4 are committed. Step 5 profile integration is implemented and verified offline, with changes ready for review. The user's manual live test successfully retrieved a route and produced a travel assessment. Automatic routing at the recommended departure and the full application travel display remain Step 6 work. OneMap API pricing and numeric usage limits remain unconfirmed.
 
 ## Progress rules
 - Work on one milestone at a time; ask for approval before coding.
@@ -59,7 +59,7 @@
 
 **Implementation:** `src/geolocation.py` now contains `GeoLocationService`, `TransitRoute`, and `GeoLocationError`. The service reads `ONEMAP_ACCESS_TOKEN` when no token is supplied and accepts an injectable HTTP opener for offline tests. It requires a timezone-aware departure, resolves exact postal matches, requests public transport, validates all leg distances, and converts units and itinerary timestamps. Missing data is an explicit failure, never a fabricated zero. Provider errors use safe messages and stable codes; tests verify silent operation and suppression of sensitive HTTP exception context. HTTP-200 provider errors are classified using known message patterns; unfamiliar errors remain `PROVIDER_ERROR`.
 
-**Boundary:** `TransitRoute` contains provider data only. Recommended departure, arrival buffer, feasibility, and the final `TravelAssessment` remain Step 4. The proof-of-concept scripts, shared application files, dependencies, and existing uncommitted diagram/document organisation were not changed. The new service still needs a later authorised live check.
+The Step 3 service returns `TransitRoute`. Step 4 adds `TravelAssessment` and departure calculations. A user-supplied screenshot now records a successful manual live service test. A route recheck at the calculated departure remains part of application integration.
 
 ## Step 4 — Departure and feasibility
 - [x] Add travel assessment result.
@@ -70,20 +70,24 @@
 
 **Exit gate:** `python -B -m unittest test_travel_assessment test_geolocation -v` passed all 44 tests, including 19 assessment tests and 25 GeoLocation tests. `python -B test_logic_manager.py` passed all 58 tests with 0 failures. Verified 12 November 2026 using the installed Python 3.14 executable.
 **Suggested commit:** `feat(geolocation): calculate departure and feasibility`  
-**Actual commit:** None.
+**Actual commit:** `ecd57beff7fe74c6e3604965dd7e223fbdcca6bb` (`refactor(geolocation): simplify code for readability`) includes Step 4 and the approved readability revision. Verified from local Git history.
 
 `src/travel_assessment.py` contains `TravelAssessment` and `TravelEvaluator`. The user approved defaults of 15 minutes for the arrival buffer and 60 minutes for the preferred journey limit. `evaluate(event_start, route)` calculates the recommended departure and compares duration with the configured limit. Passing `None` for the route produces `UNAVAILABLE`, with journey values set to `None`. Invalid caller inputs raise `ValidationError`.
 
 The tests cover the PRD's 09:00 event and 32-minute journey giving 08:13 departure, midnight/year/leap-day boundaries, timezone conversion, fractional minutes, threshold equality, configurable settings, unavailable routes and invalid inputs. The estimated arrival retains the supplied itinerary's time. A fresh route request at the recommended departure and a check against the target arrival buffer belong to the later application integration. Journey feasibility here describes the duration relative to the preferred limit. Live arrival verification remains pending.
 
 ## Step 5 — Student profile integration (shared files)
-- [ ] Add optional `home_postal_code` to `StudentProfile`.
-- [ ] Update `to_dict`/`from_dict` and profile prompt/copy logic.
-- [ ] Test backward compatibility and persistence.
+- [x] Add optional `home_postal_code` to `StudentProfile`.
+- [x] Update `to_dict`/`from_dict` and profile prompt/copy logic.
+- [x] Test backward compatibility and persistence.
 
-**Exit gate:** Old profiles load; new postal saves and reloads.  
+**Exit gate:** Older profiles load and postal strings survive JSON save/reload. `python -B -m unittest test_profile_geolocation test_travel_assessment test_geolocation -v` passed 68 tests, including 24 new profile/editor/application tests. `python -B test_logic_manager.py` passed 58 tests with 0 failures. Used the installed Python 3.14 executable directly, verified 12 November 2026.
 **Suggested commit:** `feat(profile): persist home postal code`  
 **Actual commit:** None.
+
+`StudentProfile` accepts an optional third constructor argument, `home_postal_code`. An empty string represents an unset postal, and loading `None` normalises to an empty string. Nonempty values use the existing six-digit validator. The profile editor supports adding, changing and clearing the postal, and cancellation preserves the original profile. Existing field-of-study and interest requirements still apply. The existing application saves the updated profile through its normal exit flow.
+
+The user specifically approved a small additional `main.py` edit after inspection showed the whole saved profile was passed to Gemini. Event analysis now passes field of study and interests explicitly. The profile tests check the exact AIManager call as well as profile editing and saving through EventWiseApp. JSON tests use temporary directories and fake postal codes. Team coordination remains open.
 
 ## Step 6 — Event integration (shared files)
 - [ ] Collect event destination postal code and start date/time.
@@ -115,6 +119,9 @@ The tests cover the PRD's 09:00 event and 32-minute journey giving 08:13 departu
 | 2026-11-12 | Routing | `python -B -m unittest test_geolocation -v` — 25 passed; `python -B test_logic_manager.py` — 58 passed, 0 failed. All HTTP mocked; exact lookup, unit/time conversion, invalid data, auth/quota, timeout/network, no-route, unsupported-mode and privacy checks pass. Tests required approved execution outside the sandbox because the Windows Python launcher was inaccessible inside it. | `f12bf9494da7df68e92a924b55f8dfcb469fd319` | Step 3 complete offline and committed. Live verification pending. |
 | 2026-11-12 | Assessment | `python -B -m unittest test_travel_assessment test_geolocation -v` — 44 passed (19 assessment and 25 GeoLocation). `python -B test_logic_manager.py` — 58 passed, 0 failed. Used `C:/Users/user/AppData/Local/Python/pythoncore-3.14-64/python.exe` directly with bytecode writing disabled. | None | Step 4 complete offline. Changes ready for review. |
 | 2026-11-12 | Approved readability revision | Replaced dataclass constructors with explicit `__init__` methods. Expanded conditional expressions, generator expressions, validation checks and test setup. Added names showing seconds, milliseconds and metres, plus focused method explanations. Reran `python -B -m unittest test_travel_assessment test_geolocation -v` — 44 passed. `python -B test_logic_manager.py` — 58 passed, 0 failed. Used the installed Python 3.14 executable directly. | None | Readability revision verified offline. Changes ready for review. |
+| 2026-11-12 | Step 4 commit verification | Local Git history confirms that the readability commit contains `src/travel_assessment.py` and its tests. | `ecd57beff7fe74c6e3604965dd7e223fbdcca6bb` | Step 4 and readability revision committed. |
+| 2026-11-12 | User manual live test | User-supplied terminal screenshot shows a OneMap route of 32.48693 km and 88.7167 minutes, recommended departure 13:16:17 for a 15:00 event, and `LONG_JOURNEY`. Returned arrival 13:30:08 belongs to the entered 12:00 departure. Credentials and postal codes were hidden. | Existing service | Successful manual route/assessment test. Recheck at recommended departure remains pending. |
+| 2026-11-12 | Profile integration | `python -B -m unittest test_profile_geolocation test_travel_assessment test_geolocation -v` — 68 passed (24 profile and 44 existing travel tests). `python -B test_logic_manager.py` — 58 passed, 0 failed. Covers old profiles, leading zeroes, validation, JSON round trip, copying, save/clear/cancel editing, app profile save and the exact AI profile input. | None | Step 5 verified offline. Changes ready for review. |
 | TBD | Integration | Not run | None | Not started |
 
 ## Prompt to resume work
