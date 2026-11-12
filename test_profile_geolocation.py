@@ -1,13 +1,16 @@
 """Offline tests for home postal codes in profiles, editing and JSON storage."""
 
 import io
+import os
 import unittest
+from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
 from rich.console import Console
 
-from main import EventWiseApp
+from main import EventWiseApp, main
+from src.ai_client import GeminiClient
 from src.exceptions import ValidationError
 from src.io_manager import IOManager
 from src.models import StudentProfile
@@ -236,6 +239,39 @@ class TestProfilePostalAppFlow(unittest.TestCase):
         self.assertEqual(app.profile.home_postal_code, "012345")
         data_manager.return_value.save_profile.assert_called_once_with(updated)
         self.assertEqual(app._status, "Profile saved!")
+
+
+class TestAppCredentialLoading(unittest.TestCase):
+    @patch("main.EventWiseApp")
+    def test_startup_loads_dotenv_before_creating_app(self, app_class):
+        # Use fake credentials in a temporary directory for this offline test.
+        with TemporaryDirectory(prefix="eventwise-startup-test-") as directory:
+            project_directory = Path(directory)
+            env_file = project_directory / ".env"
+            env_file.write_text("API_KEY=fake-gemini-key\nONEMAP_ACCESS_TOKEN=fake-onemap-token\n")
+
+            def create_app():
+                self.assertTrue(GeminiClient().is_available())
+                self.assertEqual(os.environ.get("API_KEY"), "fake-gemini-key")
+                self.assertEqual(os.environ.get("ONEMAP_ACCESS_TOKEN"), "fake-onemap-token")
+                return Mock()
+
+            app_class.side_effect = create_app
+            with patch.dict(os.environ, {}, clear=True):
+                with patch("main.__file__", str(project_directory / "main.py")):
+                    main()
+            app_class.assert_called_once_with()
+
+    @patch("main.EventWiseApp")
+    def test_startup_preserves_existing_environment_key(self, app_class):
+        with TemporaryDirectory(prefix="eventwise-startup-test-") as directory:
+            project_directory = Path(directory)
+            (project_directory / ".env").write_text("API_KEY=fake-file-key\n")
+            with patch.dict(os.environ, {"API_KEY": "fake-environment-key"}):
+                with patch("main.__file__", str(project_directory / "main.py")):
+                    main()
+                self.assertEqual(os.environ["API_KEY"], "fake-environment-key")
+            app_class.return_value.run.assert_called_once_with()
 
 
 if __name__ == "__main__":

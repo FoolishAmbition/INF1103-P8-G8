@@ -2,6 +2,10 @@
 main.py
 """
 
+from pathlib import Path
+
+from dotenv import load_dotenv
+
 from src.ai_manager import AIManager
 from src.data_manager import DataManager
 from src.io_manager import IOManager
@@ -210,6 +214,8 @@ class EventWiseApp:
 
 
 def main():
+    # Load credentials before the managers read their environment variables.
+    load_dotenv(Path(__file__).resolve().parent / ".env")
     app = EventWiseApp()
     app.run()
 
