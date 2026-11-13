@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 import questionary
 from questionary import Choice
 
@@ -10,7 +12,7 @@ from src.logic_manager import format_scores
 from src.event_filter import EventFilter
 from src.analytics_reporter import AnalyticsReporter
 from src.exceptions import ValidationError
-from src.geolocation import validate_singapore_postal_code
+from src.geolocation import SINGAPORE_TIMEZONE, validate_singapore_postal_code
 
 
 class IOManager(BaseManager):
@@ -336,11 +338,40 @@ class IOManager(BaseManager):
 
                 return (event_name, event_description, workload)
 
+    def collect_event_travel_info(self):
+        """Collect a destination and future Singapore start time, or cancel."""
+        while True:
+            destination = self._ask_text("Event destination postal code (six digits)")
+            if destination is None:
+                return None
+            try:
+                validate_singapore_postal_code(destination)
+            except ValidationError:
+                self.display_error("Enter a Singapore postal code containing six digits.")
+                continue
+            break
+
+        while True:
+            start_text = self._ask_text("Event start in Singapore (YYYY-MM-DD HH:MM)")
+            if start_text is None:
+                return None
+            try:
+                event_start = datetime.strptime(start_text, "%Y-%m-%d %H:%M")
+                event_start = event_start.replace(tzinfo=SINGAPORE_TIMEZONE)
+            except ValueError:
+                self.display_error("Enter a valid date and time as YYYY-MM-DD HH:MM.")
+                continue
+            if event_start <= datetime.now(SINGAPORE_TIMEZONE):
+                self.display_error("Enter a future event start time.")
+                continue
+            return destination, event_start
+
     # ------------------------------------------------------------------
     # Event result display
     # ------------------------------------------------------------------
     def display_event_summary(
-        self, event_summary, back_label="Return to the main menu"
+        self, event_summary, back_label="Return to the main menu",
+        travel_assessment=None, event_start=None,
     ):
         self.refresh_screen()
 
@@ -400,7 +431,41 @@ class IOManager(BaseManager):
             f"{data.get('ai_reasoning', 'No AI reasoning provided.')}\n"
         )
 
+        if travel_assessment is not None:
+            self._display_travel_assessment(travel_assessment, event_start)
+
         questionary.select(back_label, choices=["Back"]).ask()
+
+    def _display_travel_assessment(self, assessment, event_start):
+        """Show journey length and check arrival against the event's buffer."""
+        self.console.rule("[bold cyan]Public transport estimate[/bold cyan]", align="left")
+        if assessment.status == "UNAVAILABLE":
+            self.console.print("Travel assessment: UNAVAILABLE")
+            self.console.print(assessment.error_message, markup=False)
+            return
+
+        self.console.print(f"Provider: {assessment.provider}", markup=False)
+        self.console.print(f"Distance: {assessment.distance_km:.2f} km")
+        self.console.print(f"Journey duration: {assessment.duration_minutes:.1f} minutes")
+        self.console.print(f"Journey length: {assessment.feasibility}")
+        self.console.print(
+            f"Suggested departure: {assessment.recommended_departure:%Y-%m-%d %H:%M:%S} SGT"
+        )
+        self.console.print(
+            f"Estimated arrival: {assessment.estimated_arrival:%Y-%m-%d %H:%M:%S} SGT"
+        )
+        self.console.print(f"Event start: {event_start:%Y-%m-%d %H:%M} SGT")
+        target_arrival = event_start - timedelta(minutes=assessment.arrival_buffer_minutes)
+        if assessment.estimated_arrival <= target_arrival:
+            self.console.print(
+                f"Estimated arrival meets the {assessment.arrival_buffer_minutes}-minute buffer."
+            )
+        elif assessment.estimated_arrival <= event_start:
+            self.console.print("Warning: estimated arrival misses the requested arrival buffer.")
+        else:
+            self.console.print("Warning: estimated arrival is after the event starts.")
+        self.console.print("Departure-based OneMap estimate. Schedules can change.")
+        self.console.print("Travel details are shown for this analysis only.")
 
     def _style_for(self, value, levels):
         return self.LEVEL_STYLES.get(levels.get(value), self.DEFAULT_STYLE)

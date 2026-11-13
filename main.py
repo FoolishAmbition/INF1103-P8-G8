@@ -3,15 +3,18 @@ main.py
 """
 
 from pathlib import Path
+from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
 
 from src.ai_manager import AIManager
 from src.data_manager import DataManager
 from src.exceptions import ValidationError
+from src.geolocation import GeoLocationError, GeoLocationService, SINGAPORE_TIMEZONE
 from src.io_manager import IOManager
 from src.logic_manager import LogicManager
 from src.models import EventRecord, StudentProfile
+from src.travel_assessment import TravelEvaluator
 
 
 class EventWiseApp:
@@ -32,6 +35,8 @@ class EventWiseApp:
         self._ai_manager = AIManager()
         self._logic_manager = LogicManager()
         self._data_manager = DataManager()
+        self._geolocation_service = GeoLocationService()
+        self._travel_evaluator = TravelEvaluator()
 
         # Load persisted profile and events into domain entities
         self._profile = self._load_profile()
@@ -116,6 +121,11 @@ class EventWiseApp:
 
         event_name, event_description, workload = event_info
 
+        travel_info = self._io_manager.collect_event_travel_info()
+        if travel_info is None:
+            self._status = "Cancelled. No event was added."
+            return
+
         # Check AI result
         # Home postal code is used for travel routing. Gemini needs study and interests.
         analysis_profile = {
@@ -144,9 +154,55 @@ class EventWiseApp:
         }
 
         record = EventRecord.from_dict(event_summary)
-        self._io_manager.display_event_summary(record)
+        destination_postal_code, event_start = travel_info
+        travel_assessment = self._assess_event_travel(destination_postal_code, event_start)
+        self._io_manager.display_event_summary(
+            record, travel_assessment=travel_assessment, event_start=event_start
+        )
         self._events.append(record)
         self._status = "Event analyzed successfully"
+
+    def _assess_event_travel(self, destination_postal_code, event_start):
+        """Estimate a departure, then request the itinerary for that departure."""
+        unavailable = self._travel_evaluator.evaluate(event_start)
+        if not self._profile.home_postal_code:
+            unavailable.error_message = "Add a home postal code in Profile to get travel advice."
+            return unavailable
+
+        now = datetime.now(SINGAPORE_TIMEZONE)
+        if event_start <= now:
+            unavailable.error_message = "The event start time has already passed."
+            return unavailable
+
+        try:
+            # The first route gives us a journey duration to calculate when to leave.
+            initial_departure = event_start - timedelta(
+                minutes=60 + self._travel_evaluator.arrival_buffer_minutes
+            )
+            if initial_departure < now:
+                initial_departure = now
+            first_route = self._geolocation_service.get_transit_route(
+                self._profile.home_postal_code, destination_postal_code, initial_departure
+            )
+            first_assessment = self._travel_evaluator.evaluate(event_start, first_route)
+            proposed_departure = first_assessment.recommended_departure
+            if proposed_departure <= datetime.now(SINGAPORE_TIMEZONE):
+                unavailable.error_message = "The calculated departure time has already passed."
+                return unavailable
+
+            # Transit schedules depend on departure time, so check the proposed time.
+            checked_route = self._geolocation_service.get_transit_route(
+                self._profile.home_postal_code, destination_postal_code, proposed_departure
+            )
+            assessment = self._travel_evaluator.evaluate(event_start, checked_route)
+            # Keep the departure we actually checked together with its returned arrival.
+            assessment.recommended_departure = proposed_departure
+            return assessment
+        except GeoLocationError as error:
+            unavailable.error_message = str(error)
+        except (ValidationError, OverflowError):
+            unavailable.error_message = "Travel details could not be assessed reliably."
+        return unavailable
 
     def _handle_dummy_event(self) -> None:
         """Add a mock event for demonstration/testing without calling the AI API."""

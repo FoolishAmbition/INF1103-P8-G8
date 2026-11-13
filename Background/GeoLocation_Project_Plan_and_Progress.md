@@ -2,7 +2,7 @@
 
 **Baseline:** `oop_andrew` commit `2a08f807248949501946d2dc00a29ad960971e2b`  
 **Created:** 10 November 2026  
-**Status:** Steps 2–4 are committed. Step 5 profile integration is implemented and verified offline, with changes ready for review. The user's manual live test successfully retrieved a route and produced a travel assessment. Automatic routing at the recommended departure and the full application travel display remain Step 6 work. OneMap API pricing and numeric usage limits remain unconfirmed.
+**Status:** Steps 2-5 are committed, including the profile recovery fix in `7fd7d43`. Step 6 display-only event integration is implemented and verified offline on 13 November 2026. Changes are awaiting review and commit. A live end-to-end application demo remains pending. OneMap API pricing and numeric usage limits remain unconfirmed.
 
 ## Progress rules
 - Work on one milestone at a time; ask for approval before coding.
@@ -83,22 +83,32 @@ The tests cover the PRD's 09:00 event and 32-minute journey giving 08:13 departu
 
 **Exit gate:** Older profiles load and postal strings survive JSON save/reload. `python -B -m unittest test_profile_geolocation test_travel_assessment test_geolocation -v` passed 68 tests, including 24 new profile/editor/application tests. `python -B test_logic_manager.py` passed 58 tests with 0 failures. Used the installed Python 3.14 executable directly, verified 12 November 2026.
 **Suggested commit:** `feat(profile): persist home postal code`  
-**Actual commit:** None.
+**Actual commit:** `bc9f8ef` (`feat(profile): persist home postal code`). Follow-up recovery fix committed in `7fd7d43` (`fix(profile): preserve study and interests when saved postal is invalid`). Verified from local Git history.
 
 `StudentProfile` accepts an optional third constructor argument, `home_postal_code`. An empty string represents an unset postal, and loading `None` normalises to an empty string. Nonempty values use the existing six-digit validator. The profile editor supports adding, changing and clearing the postal, and cancellation preserves the original profile. Existing field-of-study and interest requirements still apply. The existing application saves the updated profile through its normal exit flow.
 
 The user specifically approved a small additional `main.py` edit after inspection showed the whole saved profile was passed to Gemini. Event analysis now passes field of study and interests explicitly. The profile tests check the exact AIManager call as well as profile editing and saving through EventWiseApp. JSON tests use temporary directories and fake postal codes. Team coordination remains open.
 
-## Step 6 — Event integration (shared files)
-- [ ] Collect event destination postal code and start date/time.
-- [ ] Preserve existing Gemini and recommendation workflow.
-- [ ] Display route assessment beside AI recommendation.
-- [ ] Agree on event record persistence.
-- [ ] Run existing and new regression tests.
+Recovery verification on 13 November 2026 passed 72 profile/startup/travel tests and 58 logic checks. Invalid saved postal values now clear the optional postal while preserving valid study and interests. The recovered profile saves through the normal exit flow.
 
-**Exit gate:** End-to-end demo works with no unrelated regressions.  
+## Step 6 — Event integration (shared files)
+- [x] Collect event destination postal code and start date/time.
+- [x] Preserve existing Gemini and recommendation workflow.
+- [x] Display route assessment beside AI recommendation.
+- [x] Agree on event record persistence.
+- [x] Run existing and new regression tests.
+
+**Exit gate:** Offline workflow and regression tests pass. Live end-to-end application demo remains pending.
 **Suggested commit:** `feat(eventwise): display transit assessment`  
 **Actual commit:** None.
+
+The user approved display-only integration and Year 1-readable code. `IOManager.collect_event_travel_info()` collects a destination postal string and future Singapore start time while retaining the existing three-item `collect_event_info()` contract. Cancelling either travel prompt cancels the event submission. A missing home postal produces an unavailable assessment and a prompt to update Profile.
+
+`EventWiseApp._assess_event_travel()` requests an initial route 60 minutes plus the configured buffer before the event, using the current time if that would be in the past. It calculates a proposed departure and requests a second itinerary at that time. The displayed departure stays paired with that second request's returned arrival even if its duration changes. There is one recheck, with explicit display messages for a missed buffer or arrival after event start. Past events or calculated departures produce unavailable advice. Provider failures preserve the existing AI recommendation and event creation.
+
+Event destination, start time and travel estimates are displayed during analysis only. They are not added to EventRecord or saved. Existing event viewing remains supported.
+
+Verified on 13 November 2026 with Python 3.14 and bytecode writing disabled. `python -B -m unittest test_event_geolocation test_profile_geolocation test_travel_assessment test_geolocation` passed 90 tests (18 new event integration tests and 72 existing tests). `python -B test_logic_manager.py` passed 58 checks with 0 failures. All routing in automated tests was mocked.
 
 ## Step 7 — Review and handoff
 - [ ] Run full offline suite; record exact counts.
@@ -122,7 +132,8 @@ The user specifically approved a small additional `main.py` edit after inspectio
 | 2026-11-12 | Step 4 commit verification | Local Git history confirms that the readability commit contains `src/travel_assessment.py` and its tests. | `ecd57beff7fe74c6e3604965dd7e223fbdcca6bb` | Step 4 and readability revision committed. |
 | 2026-11-12 | User manual live test | User-supplied terminal screenshot shows a OneMap route of 32.48693 km and 88.7167 minutes, recommended departure 13:16:17 for a 15:00 event, and `LONG_JOURNEY`. Returned arrival 13:30:08 belongs to the entered 12:00 departure. Credentials and postal codes were hidden. | Existing service | Successful manual route/assessment test. Recheck at recommended departure remains pending. |
 | 2026-11-12 | Profile integration | `python -B -m unittest test_profile_geolocation test_travel_assessment test_geolocation -v` — 68 passed (24 profile and 44 existing travel tests). `python -B test_logic_manager.py` — 58 passed, 0 failed. Covers old profiles, leading zeroes, validation, JSON round trip, copying, save/clear/cancel editing, app profile save and the exact AI profile input. | None | Step 5 verified offline. Changes ready for review. |
-| TBD | Integration | Not run | None | Not started |
+| 2026-11-13 | Profile commit verification and recovery | Verified commits `bc9f8ef` and `7fd7d43`. Recovery regression checks passed. | `bc9f8ef`, `7fd7d43` | Step 5 committed and verified offline. |
+| 2026-11-13 | Display-only event integration | 90 unittest tests and 58 logic checks passed. Covers prompts, cancellation, route recheck, buffer/late-arrival display, unavailable routes, midnight and existing event viewing. | None | Implemented and verified offline. Live application demo pending. |
 
 ## Prompt to resume work
 Read `AI_Coding_Background.md`, `CODEBASE_MAP_GeoLocation.md`, `PRD_GeoLocation.md`, and this tracker. Compare progress with actual source and Git history. Propose the **next single unfinished milestone**, exact files and tests, then wait for approval. Do not check boxes or claim commits without evidence.
