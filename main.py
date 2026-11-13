@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 
 from src.ai_manager import AIManager
 from src.data_manager import DataManager
+from src.exceptions import ValidationError
 from src.io_manager import IOManager
 from src.logic_manager import LogicManager
 from src.models import EventRecord, StudentProfile
@@ -54,8 +55,14 @@ class EventWiseApp:
         if data and isinstance(data, dict):
             try:
                 return StudentProfile.from_dict(data)
-            except Exception:
-                return StudentProfile()
+            except ValidationError:
+                # Recover valid study and interests when the optional postal is corrupt.
+                recovered_data = data.copy()
+                recovered_data["home_postal_code"] = ""
+                try:
+                    return StudentProfile.from_dict(recovered_data)
+                except ValidationError:
+                    return StudentProfile()
         return StudentProfile()
 
     def _load_events(self) -> list[EventRecord]:

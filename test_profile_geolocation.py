@@ -202,6 +202,53 @@ class TestProfilePostalEditor(unittest.TestCase):
 
 class TestProfilePostalAppFlow(unittest.TestCase):
     @patch("main.DataManager")
+    def test_invalid_saved_postal_recovers_study_and_interests_and_saves(self, data_manager):
+        invalid_postals = ("12345", "ABC123", 123456, True, [], {})
+        for postal_code in invalid_postals:
+            with self.subTest(postal_code=postal_code):
+                saved = {
+                    "field_of_study": "Software Engineering",
+                    "interests": ["Python"],
+                    "home_postal_code": postal_code,
+                }
+                data_manager.return_value.reset_mock()
+                data_manager.return_value.load_profile.return_value = saved
+                data_manager.return_value.load_events.return_value = []
+                app = EventWiseApp()
+                app._io_manager = Mock()
+
+                self.assertEqual(app.profile.field_of_study, "Software Engineering")
+                self.assertEqual(app.profile.interests, ["Python"])
+                self.assertEqual(app.profile.home_postal_code, "")
+                self.assertEqual(saved["home_postal_code"], postal_code)
+                data_manager.return_value.save_profile.assert_not_called()
+
+                app._handle_exit()
+
+                data_manager.return_value.save_profile.assert_called_once_with({
+                    "field_of_study": "Software Engineering",
+                    "interests": ["Python"],
+                    "home_postal_code": "",
+                })
+
+    @patch("main.DataManager")
+    def test_invalid_required_fields_still_load_an_empty_profile(self, data_manager):
+        for invalid_fields in ({"field_of_study": 123}, {"interests": "Python"}):
+            with self.subTest(invalid_fields=invalid_fields):
+                saved = {
+                    "field_of_study": "Software Engineering",
+                    "interests": ["Python"],
+                    "home_postal_code": "12345",
+                }
+                saved.update(invalid_fields)
+                data_manager.return_value.load_profile.return_value = saved
+                data_manager.return_value.load_events.return_value = []
+
+                app = EventWiseApp()
+
+                self.assertEqual(app.profile, StudentProfile())
+
+    @patch("main.DataManager")
     def test_analysis_receives_only_study_and_interests(self, data_manager):
         profile = StudentProfile("Software Engineering", ["Python"], "012345")
         data_manager.return_value.load_profile.return_value = profile.to_dict()
