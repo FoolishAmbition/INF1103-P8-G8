@@ -1,5 +1,24 @@
 
 services:
+
+  gui:
+    build: .
+    container_name: eventwise-gui
+    command: python web_app.py
+
+    env_file:
+      - .env
+
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017/
+
+    ports:
+      - "127.0.0.1:5000:5000"
+
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
   mongodb:
     image: mongo:8.0
     container_name: eventwise-mongodb

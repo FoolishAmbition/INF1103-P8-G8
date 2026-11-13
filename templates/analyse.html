@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EventWise | Make time for what matters</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script defer src="{{ url_for('static', filename='js/script.js') }}"></script>
+</head>
+<body>
+  <div class="scene" aria-hidden="true"><span class="sun"></span><span class="cloud c1"></span><span class="cloud c2"></span><span class="hill h1"></span><span class="hill h2"></span><span class="grass"></span></div>
+  <main class="workspace">
+    <header class="workspace-heading"><div class="brandmark"><span class="brand-flower">✿</span><span>eventwise<span class="brand-dot">.</span></span></div><p>Make time for what matters <span>✳</span></p></header>
+    <div class="panels">
+      <section class="panel left-panel" aria-labelledby="analyse-heading">
+        <div class="panel-heading"><div><span class="eyebrow">✦ YOUR NEXT OPPORTUNITY</span><h1 id="analyse-heading">Is this event<br><em>worth it?</em></h1><p>Tell us what caught your eye. We'll help you decide.</p></div><div class="flower-sticker" aria-hidden="true">✿</div></div>
+        <form id="event-form">
+          <label for="event-name">Event name</label>
+          <input id="event-name" name="event_name" placeholder="e.g. Future of AI Workshop" maxlength="150" required>
+          <label for="event-description">What's it about?</label>
+          <textarea id="event-description" name="event_description" placeholder="Tell us a little about the event..." maxlength="2000" rows="4" required></textarea>
+          <div class="field-title">How's your workload?</div>
+          <div class="workload-options" role="radiogroup" aria-label="Current workload">
+            <label class="workload-option"><input type="radio" name="workload" value="Low" checked><span>  Low</span></label>
+            <label class="workload-option"><input type="radio" name="workload" value="Medium"><span>  Medium</span></label>
+            <label class="workload-option"><input type="radio" name="workload" value="High"><span>  High</span></label>
+          </div>
+          <button class="action-button" id="analyse-button" type="submit">✦ Analyse this event <span>↗</span></button>
+        </form>
+        <section class="recommendation" aria-live="polite" aria-label="Recommendation result">
+          <div class="recommendation-title"><strong>✳ Your recommendation</strong><span id="result-label" class="tiny-tag">AWAITING EVENT</span></div>
+          <div id="result-empty" class="result-empty"><span class="result-doodle">✧</span><p>Your personalised recommendation will appear here.</p></div>
+          <div id="result-data" hidden><div class="result-head"><span id="result-badge" class="result-badge"></span><strong id="result-score"></strong></div><p id="result-reason"></p><div class="score-grid"><div>Career <b id="score-career">—</b></div><div>Learning <b id="score-learning">—</b></div><div>Networking <b id="score-networking">—</b></div></div><p class="ai-reason" id="ai-reason"></p></div>
+        </section>
+        <p id="form-message" class="message" role="status" aria-live="polite"></p>
+      </section>
+      <section class="panel right-panel" aria-label="History and profile">
+        <div class="tab-bar" role="tablist" aria-label="Right panel"><button class="tab selected" id="tab-history" type="button" role="tab" aria-selected="true" aria-controls="history-panel">✦ Event history</button><button class="tab" id="tab-profile" type="button" role="tab" aria-selected="false" aria-controls="profile-panel">♙ My profile</button></div>
+        <div id="history-panel" role="tabpanel" aria-labelledby="tab-history"><div class="section-heading"><div><span class="eyebrow">YOUR JOURNEY SO FAR</span><h2>Past discoveries <span>✿</span></h2></div><span id="event-count" class="count-pill">0 events</span></div><input id="history-search" type="search" placeholder="⌕  Search your events..."><div id="history-list" class="history-list"><div class="empty-history">Your analysed events will appear here.<br>Start with an event on the left! </div></div></div>
+        <div id="profile-panel" role="tabpanel" aria-labelledby="tab-profile" hidden><div class="section-heading"><div><span class="eyebrow">A LITTLE ABOUT YOU</span><h2>My profile <span>✿</span></h2></div></div><p class="profile-intro">Help EventWise understand your interests so recommendations feel more like you.</p><form id="profile-form"><label for="study-field">Field of study</label><input id="study-field" placeholder="e.g. Software Engineering" required><label for="interests">Your interests</label><textarea id="interests" rows="4" placeholder="AI, Design, Programming, Business..."></textarea><small class="hint">Separate interests with commas.</small><button class="action-button profile-button" type="submit">Save my profile <span>↗</span></button></form><p id="profile-message" class="message" role="status" aria-live="polite"></p></div>
+        <div class="panel-footer"><span class="frog" aria-hidden="true">☘</span></div>
+      </section>
+    </div>
+    <div class="bottom-caption">✳ Built for curious students · Powered by EventWise AI ✳</div>
+  </main>
+</body>
+</html>

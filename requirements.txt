@@ -4,3 +4,4 @@ questionary
 rich
 python-dotenv
 pymongo
+Flask
