@@ -74,6 +74,9 @@ def save_profile():
     payload = request.get_json(silent=True) or {}
     field = payload.get("field_of_study", "")
     interests = payload.get("interests", [])
+    home_postal_code = payload.get("home_postal_code", None)
+    if home_postal_code is not None and (not isinstance(home_postal_code, str) or (home_postal_code and (len(home_postal_code) != 6 or not home_postal_code.isascii() or not home_postal_code.isdigit()))):
+        return jsonify(error="Home postal code must be empty or exactly six digits."), 400
     if not isinstance(field, str) or not isinstance(interests, list) or not all(isinstance(x, str) for x in interests):
         return jsonify(error="Please enter a valid field of study and interests."), 400
     storage = None
@@ -83,7 +86,7 @@ def save_profile():
         profile = StudentProfile.from_dict({
             "field_of_study": field.strip(),
             "interests": [x.strip() for x in interests if x.strip()],
-            "home_postal_code": existing_profile.home_postal_code,
+            "home_postal_code": home_postal_code if home_postal_code is not None else existing_profile.home_postal_code
         })
         db.save_profile(profile.to_dict())
         return jsonify(message="Profile saved!", profile=profile.to_dict())

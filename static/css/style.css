@@ -77,4 +77,18 @@
 @media(max-width:900px){.ew-filter-row{grid-template-columns:1fr 1fr}.ew-clear-button{grid-column:1/-1}.tab-bar .tab{font-size:12px;padding:11px 4px}}
 @media(max-width:520px){.ew-filter-row{grid-template-columns:1fr}.ew-clear-button{grid-column:auto}.ew-detail-dialog{padding:17px}.ew-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
-
+/* geolocation feature */
+.geo-fieldset {margin:22px 0 18px;padding:17px 16px;border:1.5px solid #b9cab4;border-radius:13px;min-width:0;background:#f4f9ef;}
+.geo-fieldset legend {font-family:'DM Sans',sans-serif;font-size:16px;font-weight:800;padding:0 6px;color:#2d4f35;}
+.geo-optional {font-weight:400;font-size:12px;color:#667d69;}
+.geo-intro,.geo-hint {display:block;font-size:12px;line-height:1.6;color:#647568;margin:5px 0 12px;}
+.geo-fieldset label {display:block;margin-top:12px;margin-bottom:6px;}
+.geo-fieldset select,.geo-fieldset input {width:100%;box-sizing:border-box;font:inherit;min-height:42px;padding:10px 12px;border:1.5px solid #30372d;border-radius:10px;background:white;color:#222;}
+#home-postal-code {max-width:100%;}
+.geo-travel-result {margin:18px 0 0;padding:18px;border:1.5px solid #8aaa8d;border-radius:14px;background:#f1f8ed;color:#26372a;}
+.geo-travel-result h3 {margin:0 0 14px;font-size:17px;font-family:'DM Sans',sans-serif;font-weight:800;}
+.geo-result-line {display:flex;justify-content:space-between;align-items:baseline;gap:12px;border-bottom:1px solid #d5e0d3;padding:9px 0;font-size:13px;}
+.geo-result-line strong {text-align:right;overflow-wrap:anywhere;}
+.geo-unavailable {color:#8d4838;font-size:13px;line-height:1.5;}
+.geo-warning {font-size:13px;line-height:1.5;color:#8b5718;font-weight:600;}
+@media(max-width:520px){.geo-result-line{flex-direction:column;gap:3px}.geo-result-line strong{text-align:left}}

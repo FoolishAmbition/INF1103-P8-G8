@@ -25,6 +25,29 @@
             <label class="workload-option"><input type="radio" name="workload" value="Medium"><span>  Medium</span></label>
             <label class="workload-option"><input type="radio" name="workload" value="High"><span>  High</span></label>
           </div>
+          <!-- Optional OneMap public-transport planning -->
+          <fieldset class="geo-fieldset">
+            <legend>Plan your journey <span class="geo-optional">(optional)</span></legend>
+            <p class="geo-intro">Estimate public-transport travel from a Singapore postal code. This does not change your AI scores.</p>
+            <label for="geo-origin-choice">Travelling from</label>
+            <select id="geo-origin-choice" name="origin_choice">
+              <option value="skip">Skip travel estimate</option>
+              <option value="home">My saved home postal code</option>
+              <option value="alternate">Another Singapore postal code</option>
+            </select>
+            <div id="geo-fields" hidden>
+              <div id="geo-home-message" class="geo-hint" hidden></div>
+              <div id="geo-alternate-field" hidden>
+                <label for="geo-origin-postal">Starting postal code</label>
+                <input id="geo-origin-postal" type="text" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="6-digit Singapore postal code" autocomplete="off">
+              </div>
+              <label for="geo-destination-postal">Event location postal code</label>
+              <input id="geo-destination-postal" type="text" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="6-digit Singapore postal code" autocomplete="off">
+              <label for="geo-event-start">Event starting date and time (Singapore)</label>
+              <input id="geo-event-start" type="datetime-local">
+              <small class="geo-hint">Times use Singapore time (UTC+08:00). Travel is estimated using OneMap public transport.</small>
+            </div>
+          </fieldset>
           <button class="action-button" id="analyse-button" type="submit">✦ Analyse this event <span>↗</span></button>
         </form>
         <section class="recommendation" aria-live="polite" aria-label="Recommendation result">
@@ -32,12 +55,16 @@
           <div id="result-empty" class="result-empty"><span class="result-doodle">✧</span><p>Your personalised recommendation will appear here.</p></div>
           <div id="result-data" hidden><div class="result-head"><span id="result-badge" class="result-badge"></span><strong id="result-score"></strong></div><p id="result-reason"></p><div class="score-grid"><div>Career <b id="score-career">—</b></div><div>Learning <b id="score-learning">—</b></div><div>Networking <b id="score-networking">—</b></div></div><p class="ai-reason" id="ai-reason"></p></div>
         </section>
+        <section id="geo-travel-result" class="geo-travel-result" aria-label="Travel estimate" aria-live="polite" hidden>
+          <h3>✦ Your journey estimate</h3>
+          <div id="geo-travel-content"></div>
+        </section>
         <p id="form-message" class="message" role="status" aria-live="polite"></p>
       </section>
       <section class="panel right-panel" aria-label="History and profile">
         <div class="tab-bar" role="tablist" aria-label="Right panel"><button class="tab selected" id="tab-history" type="button" role="tab" aria-selected="true" aria-controls="history-panel">✦ Event history</button><button class="tab" id="tab-profile" type="button" role="tab" aria-selected="false" aria-controls="profile-panel">♙ My profile</button></div>
         <div id="history-panel" role="tabpanel" aria-labelledby="tab-history"><div class="section-heading"><div><span class="eyebrow">YOUR JOURNEY SO FAR</span><h2>Past discoveries <span>✿</span></h2></div><span id="event-count" class="count-pill">0 events</span></div><input id="history-search" type="search" placeholder="⌕  Search your events..."><div id="history-list" class="history-list"><div class="empty-history">Your analysed events will appear here.<br>Start with an event on the left! </div></div></div>
-        <div id="profile-panel" role="tabpanel" aria-labelledby="tab-profile" hidden><div class="section-heading"><div><span class="eyebrow">A LITTLE ABOUT YOU</span><h2>My profile <span>✿</span></h2></div></div><p class="profile-intro">Help EventWise understand your interests so recommendations feel more like you.</p><form id="profile-form"><label for="study-field">Field of study</label><input id="study-field" placeholder="e.g. Software Engineering" required><label for="interests">Your interests</label><textarea id="interests" rows="4" placeholder="AI, Design, Programming, Business..."></textarea><small class="hint">Separate interests with commas.</small><button class="action-button profile-button" type="submit">Save my profile <span>↗</span></button></form><p id="profile-message" class="message" role="status" aria-live="polite"></p></div>
+        <div id="profile-panel" role="tabpanel" aria-labelledby="tab-profile" hidden><div class="section-heading"><div><span class="eyebrow">A LITTLE ABOUT YOU</span><h2>My profile <span>✿</span></h2></div></div><p class="profile-intro">Help EventWise understand your interests so recommendations feel more like you.</p><form id="profile-form"><label for="study-field">Field of study</label><input id="study-field" placeholder="e.g. Software Engineering" required><label for="interests">Your interests</label><textarea id="interests" rows="4" placeholder="AI, Design, Programming, Business..."></textarea><small class="hint">Separate interests with commas.</small><label for="home-postal-code">Home postal code <span class="geo-optional">(optional)</span></label><input id="home-postal-code" name="home_postal_code" type="text" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="6-digit Singapore postal code" autocomplete="off"><small class="hint">Used only if you choose “My saved home postal code” for travel planning.</small><button class="action-button profile-button" type="submit">Save my profile <span>↗</span></button></form><p id="profile-message" class="message" role="status" aria-live="polite"></p></div>
         <div class="panel-footer"><span class="frog" aria-hidden="true">☘</span></div>
       </section>
     </div>

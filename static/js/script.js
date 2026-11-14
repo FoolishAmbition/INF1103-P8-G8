@@ -101,9 +101,11 @@ $('event-form').addEventListener('submit', async (e) => {
     const result = await api('/api/analyse', 'POST', {
       event_name: $('event-name').value.trim(),
       event_description: $('event-description').value.trim(),
-      workload: document.querySelector('input[name="workload"]:checked').value
+      workload: document.querySelector('input[name="workload"]:checked').value,
+      travel: collectTravelInputs()
     });
     showResult(result.event);
+    renderTravelEstimate(result.travel);
     savedEvents = result.events || [...savedEvents, result.event];
     renderHistory();
     setMessage('form-message', '✓ Recommendation generated and saved!');
@@ -117,18 +119,21 @@ $('profile-form').addEventListener('submit', async (e) => {
   try {
     await api('/api/profile', 'POST', {
       field_of_study: $('study-field').value.trim(),
-      interests: $('interests').value.split(',').map(s => s.trim()).filter(Boolean)
+      interests: $('interests').value.split(',').map(s => s.trim()).filter(Boolean),
+      home_postal_code: $('home-postal-code').value.trim()
     });
     setMessage('profile-message', '✓ Profile saved!');
   } catch (err) { setMessage('profile-message', err.message, true); }
 });
-
+/*saved information to be loaded */
 async function loadState() {
   try {
     const state = await api('/api/state');
     const profile = state.profile || {};
     $('study-field').value = profile.field_of_study || '';
     $('interests').value = Array.isArray(profile.interests) ? profile.interests.join(', ') : '';
+    $('home-postal-code').value = profile.home_postal_code || '';
+    updateGeoVisibility();
     savedEvents = state.events || [];
     renderHistory();
   } catch (err) { setMessage('form-message', err.message, true); }
@@ -260,6 +265,12 @@ loadState();
     addText(container, 'Networking value', e.networking === null ? 'Not available' : `${e.networking}/5`);
     addText(container, 'Recommendation reason', e.reason);
     addText(container, 'AI reasoning', e.aiReasoning);
+    if (raw.travel && raw.travel.status === 'AVAILABLE') {
+      addText(container, 'Public transport distance', formatGeoNumber(raw.travel.distance_km, 'km'));
+      addText(container, 'Travel duration', formatGeoNumber(raw.travel.duration_minutes, 'minutes'));
+      addText(container, 'Recommended departure', formatGeoDate(raw.travel.recommended_departure));
+      addText(container, 'Estimated arrival', formatGeoDate(raw.travel.estimated_arrival));
+    }
 
     overlay.hidden = false;
     document.body.classList.add('ew-dialog-open');
@@ -451,3 +462,115 @@ loadState();
   renderHistory();
 })();
 
+/* new geolocation fields */
+function updateGeoVisibility() {
+  const choice = $('geo-origin-choice').value;
+  const enabled = choice !== 'skip';
+  $('geo-fields').hidden = !enabled;
+  $('geo-alternate-field').hidden = choice !== 'alternate';
+  const home = $('home-postal-code').value.trim();
+  const hint = $('geo-home-message');
+  hint.hidden = choice !== 'home';
+  if (choice === 'home') {
+    hint.textContent = /^[0-9]{6}$/.test(home)
+      ? `Using your saved home postal code: ${home}`
+      : 'Set a 6-digit home postal code in My Profile and save it first.';
+  }
+  $('geo-origin-postal').required = choice === 'alternate';
+  $('geo-destination-postal').required = enabled;
+  $('geo-event-start').required = enabled;
+}
+$('geo-origin-choice').addEventListener('change', updateGeoVisibility);
+$('home-postal-code').addEventListener('input', updateGeoVisibility);
+updateGeoVisibility();
+
+function collectTravelInputs() {
+  const choice = $('geo-origin-choice').value;
+  if (choice === 'skip') return { origin_choice: 'skip' };
+  const postal = $('geo-destination-postal').value.trim();
+  const start = $('geo-event-start').value;
+  const origin = $('geo-origin-postal').value.trim();
+  if (choice === 'home' && !/^[0-9]{6}$/.test($('home-postal-code').value.trim())) {
+    throw new Error('Save a 6-digit home postal code in My Profile, or choose another starting point.');
+  }
+  if (choice === 'alternate' && !/^[0-9]{6}$/.test(origin)) {
+    throw new Error('Enter a valid 6-digit starting postal code.');
+  }
+  if (!/^[0-9]{6}$/.test(postal)) {
+    throw new Error('Enter a valid 6-digit event location postal code.');
+  }
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(start)) {
+    throw new Error('Choose the event start date and time (Singapore time).');
+  }
+  return {
+    origin_choice: choice,
+    ...(choice === 'alternate' ? { origin_postal_code: origin } : {}),
+    destination_postal_code: postal,
+    event_start: start + ':00+08:00'
+  };
+}
+
+function formatGeoNumber(value, unit) {
+  const n = Number(value);
+  return value === null || value === undefined || !Number.isFinite(n)
+    ? 'Unavailable' : `${Number(n.toFixed(1))} ${unit}`;
+}
+function formatGeoDate(value) {
+  if (!value) return 'Unavailable';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return 'Unavailable';
+  return new Intl.DateTimeFormat('en-SG', {
+    timeZone: 'Asia/Singapore', day: 'numeric', month: 'short', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true
+  }).format(d);
+}
+function renderTravelEstimate(travel) {
+  const section = $('geo-travel-result');
+  const content = $('geo-travel-content');
+  content.replaceChildren();
+  if (!travel || travel.status === 'SKIPPED') {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+  const add = (name, value) => {
+    const line = document.createElement('div');
+    line.className = 'geo-result-line';
+    const label = document.createElement('span');
+    label.textContent = name;
+    const valueText = document.createElement('strong');
+    valueText.textContent = value;
+    line.append(label, valueText);
+    content.append(line);
+  };
+  if (travel.status !== 'AVAILABLE') {
+    const message = document.createElement('p');
+    message.className = 'geo-unavailable';
+    message.textContent = travel.error_message || 'Journey estimate is unavailable.';
+    content.append(message);
+    return;
+  }
+  add('Travel mode', 'Public transport (OneMap)');
+  add('Distance', formatGeoNumber(travel.distance_km, 'km'));
+  add('Duration', formatGeoNumber(travel.duration_minutes, 'min'));
+  add('Recommended departure', formatGeoDate(travel.recommended_departure));
+  add('Estimated arrival', formatGeoDate(travel.estimated_arrival));
+  if (travel.arrival_buffer_minutes !== null) {
+    add('Arrival buffer', formatGeoNumber(travel.arrival_buffer_minutes, 'min'));
+  }
+  if (travel.feasibility === 'LONG_JOURNEY') {
+    const warning = document.createElement('p');
+    warning.className = 'geo-warning';
+    warning.textContent = 'This is a long journey compared with the preferred travel limit.';
+    content.append(warning);
+  }
+  const warnings = Array.isArray(travel.warning_codes) ? travel.warning_codes : [];
+  if (warnings.includes('EVENT_START_MISSED') || warnings.includes('BUFFER_MISSED')) {
+    const warning = document.createElement('p');
+    warning.className = 'geo-warning';
+    warning.textContent = warnings.includes('EVENT_START_MISSED')
+      ? 'Estimated arrival is after the event starts.'
+      : 'Estimated arrival may miss the recommended early-arrival buffer.';
+    content.append(warning);
+  }
+}
