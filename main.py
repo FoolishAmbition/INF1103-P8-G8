@@ -2,12 +2,20 @@
 main.py
 """
 
+from pathlib import Path
+from datetime import datetime, timedelta
+
+from dotenv import load_dotenv
+
 from src.ai_manager import AIManager
 from src.data_manager import DataManager
+from src.exceptions import ValidationError
+from src.geolocation import GeoLocationError, GeoLocationService, SINGAPORE_TIMEZONE
 from src.io_manager import IOManager
 from src.logic_manager import LogicManager
 from src.models import EventRecord, StudentProfile
 from src.mongodb_storage import MongoStorage
+from src.travel_assessment import TravelEvaluator
 
 
 class EventWiseApp:
@@ -31,6 +39,8 @@ class EventWiseApp:
         # Connect EventWise to MongoDB.
         self._mongo_storage = MongoStorage()
         self._data_manager = DataManager(storage=self._mongo_storage)
+        self._geolocation_service = GeoLocationService()
+        self._travel_evaluator = TravelEvaluator()
 
         # Load persisted profile and events into domain entities
         self._profile = self._load_profile()
@@ -54,8 +64,14 @@ class EventWiseApp:
         if data and isinstance(data, dict):
             try:
                 return StudentProfile.from_dict(data)
-            except Exception:
-                return StudentProfile()
+            except ValidationError:
+                # Recover valid study and interests when the optional postal is corrupt.
+                recovered_data = data.copy()
+                recovered_data["home_postal_code"] = ""
+                try:
+                    return StudentProfile.from_dict(recovered_data)
+                except ValidationError:
+                    return StudentProfile()
         return StudentProfile()
 
     def _load_events(self) -> list[EventRecord]:
@@ -112,9 +128,19 @@ class EventWiseApp:
 
         event_name, event_description, workload = event_info
 
+        travel_info = self._io_manager.collect_event_travel_info()
+        if travel_info is None:
+            self._status = "Cancelled. No event was added."
+            return
+
         # Check AI result
+        # Home postal code is used for travel routing. Gemini needs study and interests.
+        analysis_profile = {
+            "field_of_study": self._profile.field_of_study,
+            "interests": list(self._profile.interests),
+        }
         ai_result, error_message = self._ai_manager.analyze_event(
-            self._profile.to_dict(), event_name, event_description
+            analysis_profile, event_name, event_description
         )
         if ai_result is None:
             self._status = error_message
@@ -135,9 +161,55 @@ class EventWiseApp:
         }
 
         record = EventRecord.from_dict(event_summary)
-        self._io_manager.display_event_summary(record)
+        destination_postal_code, event_start = travel_info
+        travel_assessment = self._assess_event_travel(destination_postal_code, event_start)
+        self._io_manager.display_event_summary(
+            record, travel_assessment=travel_assessment, event_start=event_start
+        )
         self._events.append(record)
         self._status = "Event analyzed successfully"
+
+    def _assess_event_travel(self, destination_postal_code, event_start):
+        """Estimate a departure, then request the itinerary for that departure."""
+        unavailable = self._travel_evaluator.evaluate(event_start)
+        if not self._profile.home_postal_code:
+            unavailable.error_message = "Add a home postal code in Profile to get travel advice."
+            return unavailable
+
+        now = datetime.now(SINGAPORE_TIMEZONE)
+        if event_start <= now:
+            unavailable.error_message = "The event start time has already passed."
+            return unavailable
+
+        try:
+            # The first route gives us a journey duration to calculate when to leave.
+            initial_departure = event_start - timedelta(
+                minutes=60 + self._travel_evaluator.arrival_buffer_minutes
+            )
+            if initial_departure < now:
+                initial_departure = now
+            first_route = self._geolocation_service.get_transit_route(
+                self._profile.home_postal_code, destination_postal_code, initial_departure
+            )
+            first_assessment = self._travel_evaluator.evaluate(event_start, first_route)
+            proposed_departure = first_assessment.recommended_departure
+            if proposed_departure <= datetime.now(SINGAPORE_TIMEZONE):
+                unavailable.error_message = "The calculated departure time has already passed."
+                return unavailable
+
+            # Transit schedules depend on departure time, so check the proposed time.
+            checked_route = self._geolocation_service.get_transit_route(
+                self._profile.home_postal_code, destination_postal_code, proposed_departure
+            )
+            assessment = self._travel_evaluator.evaluate(event_start, checked_route)
+            # Keep the departure we actually checked together with its returned arrival.
+            assessment.recommended_departure = proposed_departure
+            return assessment
+        except GeoLocationError as error:
+            unavailable.error_message = str(error)
+        except (ValidationError, OverflowError):
+            unavailable.error_message = "Travel details could not be assessed reliably."
+        return unavailable
 
     def _handle_dummy_event(self) -> None:
         """Add a mock event for demonstration/testing without calling the AI API."""
@@ -212,6 +284,8 @@ class EventWiseApp:
 
 
 def main():
+    # Load credentials before the managers read their environment variables.
+    load_dotenv(Path(__file__).resolve().parent / ".env")
     app = EventWiseApp()
     app.run()
 

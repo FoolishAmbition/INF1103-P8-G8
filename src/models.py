@@ -1,5 +1,5 @@
 """
-1.StudentProfile: student degree and interests.
+1.StudentProfile: student degree, interests and optional home postal code.
 2.AIScores: three AI scores, each from 1 to 5.
 3.EventRecord: an event with workload, AI scores, recommendation, timestamp.
 """
@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 
 from src.exceptions import ValidationError
+from src.geolocation import validate_singapore_postal_code
 
 VALID_WORKLOADS = ("Low", "Medium", "High")
 
@@ -53,9 +54,15 @@ class Entity(ABC):
 # -- StudentProfile -----------------------------------------------------
 
 class StudentProfile(Entity):
-    def __init__(self, field_of_study="", interests=None):
+    def __init__(self, field_of_study="", interests=None, home_postal_code=""):
         self.field_of_study = clean_text(field_of_study, "field_of_study")
         self.interests = []
+        # Older saved profiles have no postal code. Empty means it is unset.
+        if home_postal_code is None:
+            home_postal_code = ""
+        if home_postal_code != "":
+            validate_singapore_postal_code(home_postal_code)
+        self.home_postal_code = home_postal_code
 
         if interests is not None:
             if not isinstance(interests, (list, tuple, set)):
@@ -97,6 +104,7 @@ class StudentProfile(Entity):
         return {
             "field_of_study": self.field_of_study,
             "interests": list(self.interests),
+            "home_postal_code": self.home_postal_code,
         }
 
     @classmethod
@@ -104,7 +112,11 @@ class StudentProfile(Entity):
         if not data:
             return cls()
         check_is_dict(data, "StudentProfile")
-        return cls(data.get("field_of_study", ""), data.get("interests", []))
+        return cls(
+            field_of_study=data.get("field_of_study", ""),
+            interests=data.get("interests", []),
+            home_postal_code=data.get("home_postal_code", ""),
+        )
 
     def __eq__(self, other):
         if not isinstance(other, StudentProfile):
