@@ -72,7 +72,12 @@ def save_profile():
     storage = None
     try:
         storage, db, _, _, StudentProfile, _ = get_backend()
-        profile = StudentProfile.from_dict({"field_of_study": field.strip(), "interests": [x.strip() for x in interests if x.strip()]})
+        existing_profile = profile_from_storage(db, StudentProfile)
+        profile = StudentProfile.from_dict({
+            "field_of_study": field.strip(),
+            "interests": [x.strip() for x in interests if x.strip()],
+            "home_postal_code": existing_profile.home_postal_code,
+        })
         db.save_profile(profile.to_dict())
         return jsonify(message="Profile saved!", profile=profile.to_dict())
     except Exception as exc:
