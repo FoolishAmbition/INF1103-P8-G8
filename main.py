@@ -3,15 +3,15 @@ main.py
 """
 
 from pathlib import Path
-from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
 
 from src.ai_manager import AIManager
 from src.data_manager import DataManager
 from src.exceptions import ValidationError
-from src.geolocation import GeoLocationError, GeoLocationService, SINGAPORE_TIMEZONE
+from src.geolocation import GeoLocationService
 from src.io_manager import IOManager
+from src.journey_planner import JourneyPlanner
 from src.logic_manager import LogicManager
 from src.models import EventRecord, StudentProfile
 from src.mongodb_storage import MongoStorage
@@ -183,48 +183,12 @@ class EventWiseApp:
         self._status = "Event analyzed successfully"
 
     def _assess_event_travel(self, destination_postal_code, event_start, origin_postal_code=None):
-        """Estimate a departure, then request the itinerary for that departure."""
-        unavailable = self._travel_evaluator.evaluate(event_start)
+        """Delegate to the shared planner while preserving the CLI assessment result."""
         if origin_postal_code is None:
             origin_postal_code = self._profile.home_postal_code
-        if not origin_postal_code:
-            unavailable.error_message = "Add a home postal code in Profile to get travel advice."
-            return unavailable
-
-        now = datetime.now(SINGAPORE_TIMEZONE)
-        if event_start <= now:
-            unavailable.error_message = "The event start time has already passed."
-            return unavailable
-
-        try:
-            # The first route gives us a journey duration to calculate when to leave.
-            initial_departure = event_start - timedelta(
-                minutes=60 + self._travel_evaluator.arrival_buffer_minutes
-            )
-            if initial_departure < now:
-                initial_departure = now
-            first_route = self._geolocation_service.get_transit_route(
-                origin_postal_code, destination_postal_code, initial_departure
-            )
-            first_assessment = self._travel_evaluator.evaluate(event_start, first_route)
-            proposed_departure = first_assessment.recommended_departure
-            if proposed_departure <= datetime.now(SINGAPORE_TIMEZONE):
-                unavailable.error_message = "The calculated departure time has already passed."
-                return unavailable
-
-            # Transit schedules depend on departure time, so check the proposed time.
-            checked_route = self._geolocation_service.get_transit_route(
-                origin_postal_code, destination_postal_code, proposed_departure
-            )
-            assessment = self._travel_evaluator.evaluate(event_start, checked_route)
-            # Keep the departure we actually checked together with its returned arrival.
-            assessment.recommended_departure = proposed_departure
-            return assessment
-        except GeoLocationError as error:
-            unavailable.error_message = str(error)
-        except (ValidationError, OverflowError):
-            unavailable.error_message = "Travel details could not be assessed reliably."
-        return unavailable
+        planner = JourneyPlanner(self._geolocation_service, self._travel_evaluator)
+        assessment, _ = planner.plan(origin_postal_code, destination_postal_code, event_start)
+        return assessment
 
     def _handle_dummy_event(self) -> None:
         """Add a mock event for demonstration/testing without calling the AI API."""
