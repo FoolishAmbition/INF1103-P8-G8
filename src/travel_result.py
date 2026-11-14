@@ -7,6 +7,10 @@ from src.travel_assessment import TravelAssessment, TravelEvaluator
 
 
 ERROR_MESSAGES = {
+    "MISSING_ORIGIN": "Choose another postal code or add a saved home before planning travel.",
+    "EVENT_PAST": "The event start time has already passed.",
+    "DEPARTURE_PAST": "The estimated departure time has already passed.",
+    "INVALID_INPUT": "Check the journey postal codes and timezone-aware event start time.",
     "TRAVEL_UNAVAILABLE": "Reliable transit information is unavailable.",
     "AUTHENTICATION_ERROR": "The transit service is temporarily unavailable.",
     "LOCATION_NOT_FOUND": "A postal-code location could not be found.",
