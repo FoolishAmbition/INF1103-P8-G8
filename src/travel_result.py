@@ -1,5 +1,7 @@
 """Convert travel assessments into a small, privacy-safe GUI response."""
 
+from datetime import timedelta
+
 from src.exceptions import ValidationError
 from src.travel_assessment import TravelAssessment, TravelEvaluator
 
@@ -18,17 +20,22 @@ ERROR_MESSAGES = {
 }
 
 
-def serialize_travel_result(assessment=None, *, preferred_limit_minutes=None, error_code=None):
+def serialize_travel_result(
+    assessment=None, *, preferred_limit_minutes=None, error_code=None, event_start=None
+):
     """Return JSON-compatible data; None means the user skipped travel.
 
     Pass the evaluator's actual preferred limit when known. No route request is
     performed here. Error text comes from a fixed list, never exception messages.
-    Warnings, legs and alternatives remain unknown until separately implemented.
+    Supply event_start to assess lateness against the returned itinerary arrival.
+    Without it, warnings remain unknown. Legs and alternatives are not implemented.
     """
     if assessment is not None and not isinstance(assessment, TravelAssessment):
         raise ValidationError("Assessment must be a TravelAssessment or None.")
     if preferred_limit_minutes is not None:
         TravelEvaluator._validate_number(preferred_limit_minutes, "Preferred journey limit")
+    if event_start is not None:
+        event_start = TravelEvaluator._singapore_datetime(event_start, "Event start")
 
     status = "SKIPPED"
     if assessment is not None:
@@ -84,4 +91,16 @@ def serialize_travel_result(assessment=None, *, preferred_limit_minutes=None, er
         estimated_arrival=arrival.isoformat(),
         feasibility=assessment.feasibility,
     )
+    if event_start is not None:
+        try:
+            target_arrival = event_start - timedelta(minutes=assessment.arrival_buffer_minutes)
+        except OverflowError:
+            raise ValidationError("Arrival buffer exceeds the supported date range.") from None
+        warnings = []
+        # Use the stronger warning when both the buffer and event start are missed.
+        if arrival > event_start:
+            warnings.append("EVENT_START_MISSED")
+        elif arrival > target_arrival:
+            warnings.append("BUFFER_MISSED")
+        result["warning_codes"] = warnings
     return result

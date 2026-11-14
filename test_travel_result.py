@@ -2,7 +2,7 @@
 
 import json
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from src.exceptions import ValidationError
 from src.geolocation import SINGAPORE_TIMEZONE, TransitRoute
@@ -96,6 +96,71 @@ class TestTravelResult(unittest.TestCase):
         self.assessment.recommended_departure = datetime(2027, 1, 1)
         with self.assertRaises(ValidationError):
             serialize_travel_result(self.assessment)
+
+    def test_arrival_warning_boundaries_use_returned_arrival(self):
+        cases = (
+            (-16, []),
+            (-15, []),
+            (-14, ["BUFFER_MISSED"]),
+            (0, ["BUFFER_MISSED"]),
+            (1, ["EVENT_START_MISSED"]),
+        )
+        for minutes, expected in cases:
+            with self.subTest(minutes=minutes):
+                self.assessment.estimated_arrival = self.start + timedelta(minutes=minutes)
+                result = serialize_travel_result(self.assessment, event_start=self.start)
+                self.assertEqual(result["warning_codes"], expected)
+                self.assertEqual(result["feasibility"], "WITHIN_LIMIT")
+                self.assertEqual(self.assessment.recommended_departure, self.route.departure_time)
+
+    def test_warning_converts_utc_and_crosses_midnight(self):
+        event_start = self.start.replace(minute=0)
+        self.assessment.estimated_arrival = event_start - timedelta(minutes=10)
+        result = serialize_travel_result(
+            self.assessment, event_start=event_start.astimezone(timezone.utc)
+        )
+        self.assertEqual(result["warning_codes"], ["BUFFER_MISSED"])
+        self.assertEqual(result["estimated_arrival"], "2026-12-31T23:50:00+08:00")
+
+    def test_custom_buffer_and_limit_preserve_independent_meanings(self):
+        evaluator = TravelEvaluator(arrival_buffer_minutes=20, preferred_limit_minutes=32)
+        assessment = evaluator.evaluate(self.start, self.route)
+        result = serialize_travel_result(
+            assessment, event_start=self.start, preferred_limit_minutes=32
+        )
+        self.assertEqual(result["recommended_departure"], "2026-12-31T23:28:00+08:00")
+        self.assertEqual(result["warning_codes"], ["BUFFER_MISSED"])
+        self.assertEqual(result["feasibility"], "WITHIN_LIMIT")
+        self.assertEqual(result["preferred_travel_limit_minutes"], 32)
+        longer = TravelEvaluator(arrival_buffer_minutes=20, preferred_limit_minutes=31)
+        long_result = serialize_travel_result(
+            longer.evaluate(self.start, self.route), event_start=self.start,
+            preferred_limit_minutes=31,
+        )
+        self.assertEqual(long_result["feasibility"], "LONG_JOURNEY")
+        self.assertEqual(long_result["warning_codes"], result["warning_codes"])
+        self.assertEqual(long_result["recommended_departure"], result["recommended_departure"])
+
+    def test_zero_buffer_and_long_journey_can_arrive_on_time(self):
+        evaluator = TravelEvaluator(arrival_buffer_minutes=0, preferred_limit_minutes=20)
+        assessment = evaluator.evaluate(self.start, self.route)
+        assessment.estimated_arrival = self.start
+        result = serialize_travel_result(assessment, event_start=self.start)
+        self.assertEqual(result["warning_codes"], [])
+        self.assertEqual(result["feasibility"], "LONG_JOURNEY")
+
+    def test_skipped_and_unavailable_cannot_have_arrival_warnings(self):
+        for assessment in (None, self.evaluator.evaluate(self.start)):
+            result = serialize_travel_result(assessment, event_start=self.start)
+            self.assertIsNone(result["warning_codes"])
+
+    def test_invalid_event_start_and_excessive_buffer_are_rejected(self):
+        for invalid in ("2027-01-01", datetime(2027, 1, 1)):
+            with self.subTest(value=invalid), self.assertRaises(ValidationError):
+                serialize_travel_result(self.assessment, event_start=invalid)
+        self.assessment.arrival_buffer_minutes = 1e100
+        with self.assertRaises(ValidationError):
+            serialize_travel_result(self.assessment, event_start=self.start)
 
 
 if __name__ == "__main__":
