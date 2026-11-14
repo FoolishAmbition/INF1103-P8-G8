@@ -201,6 +201,12 @@ class TestProfilePostalEditor(unittest.TestCase):
 
 
 class TestProfilePostalAppFlow(unittest.TestCase):
+    def setUp(self):
+        # Keep application construction independent of a running MongoDB server.
+        mongo_patch = patch("main.MongoStorage")
+        mongo_patch.start()
+        self.addCleanup(mongo_patch.stop)
+
     @patch("main.DataManager")
     def test_invalid_saved_postal_recovers_study_and_interests_and_saves(self, data_manager):
         invalid_postals = ("12345", "ABC123", 123456, True, [], {})

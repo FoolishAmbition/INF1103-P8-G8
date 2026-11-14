@@ -49,6 +49,10 @@ class TestEventTravelPrompts(unittest.TestCase):
 
 class TestEventTravelWorkflow(unittest.TestCase):
     def setUp(self):
+        # The application constructs MongoStorage before its mocked DataManager.
+        mongo_patch = patch("main.MongoStorage")
+        mongo_patch.start()
+        self.addCleanup(mongo_patch.stop)
         storage_patch = patch("main.DataManager")
         data_manager = storage_patch.start()
         self.addCleanup(storage_patch.stop)
