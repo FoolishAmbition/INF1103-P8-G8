@@ -338,6 +338,35 @@ class IOManager(BaseManager):
 
                 return (event_name, event_description, workload)
 
+    def choose_event_travel_origin(self, home_postal_code):
+        """Return a journey origin, an empty string to skip, or None to cancel."""
+        choices = []
+        if home_postal_code:
+            choices.append(Choice(title="Use saved home", value="home"))
+        choices.extend([
+            Choice(title="Use another postal code", value="alternate"),
+            Choice(title="Skip travel planning", value="skip"),
+            Choice(title="Cancel event submission", value="cancel"),
+        ])
+        choice = questionary.select("Plan a public-transport journey?", choices=choices).ask()
+        if choice in (None, "cancel"):
+            return None
+        if choice == "skip":
+            return ""
+        if choice == "home":
+            return home_postal_code
+
+        while True:
+            origin = self._ask_text("Journey origin postal code (six digits; not saved)")
+            if origin is None:
+                return None
+            try:
+                validate_singapore_postal_code(origin)
+            except ValidationError:
+                self.display_error("Enter a Singapore postal code containing six digits.")
+                continue
+            return origin
+
     def collect_event_travel_info(self):
         """Collect a destination and future Singapore start time, or cancel."""
         while True:

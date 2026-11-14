@@ -128,13 +128,21 @@ class EventWiseApp:
 
         event_name, event_description, workload = event_info
 
-        travel_info = self._io_manager.collect_event_travel_info()
-        if travel_info is None:
+        origin_postal_code = self._io_manager.choose_event_travel_origin(
+            self._profile.home_postal_code
+        )
+        if origin_postal_code is None:
             self._status = "Cancelled. No event was added."
             return
+        travel_info = None
+        if origin_postal_code != "":
+            travel_info = self._io_manager.collect_event_travel_info()
+            if travel_info is None:
+                self._status = "Cancelled. No event was added."
+                return
 
         # Check AI result
-        # Home postal code is used for travel routing. Gemini needs study and interests.
+        # Journey origins are used only for routing. Gemini needs study and interests.
         analysis_profile = {
             "field_of_study": self._profile.field_of_study,
             "interests": list(self._profile.interests),
@@ -161,18 +169,25 @@ class EventWiseApp:
         }
 
         record = EventRecord.from_dict(event_summary)
-        destination_postal_code, event_start = travel_info
-        travel_assessment = self._assess_event_travel(destination_postal_code, event_start)
+        event_start = None
+        travel_assessment = None
+        if travel_info is not None:
+            destination_postal_code, event_start = travel_info
+            travel_assessment = self._assess_event_travel(
+                destination_postal_code, event_start, origin_postal_code
+            )
         self._io_manager.display_event_summary(
             record, travel_assessment=travel_assessment, event_start=event_start
         )
         self._events.append(record)
         self._status = "Event analyzed successfully"
 
-    def _assess_event_travel(self, destination_postal_code, event_start):
+    def _assess_event_travel(self, destination_postal_code, event_start, origin_postal_code=None):
         """Estimate a departure, then request the itinerary for that departure."""
         unavailable = self._travel_evaluator.evaluate(event_start)
-        if not self._profile.home_postal_code:
+        if origin_postal_code is None:
+            origin_postal_code = self._profile.home_postal_code
+        if not origin_postal_code:
             unavailable.error_message = "Add a home postal code in Profile to get travel advice."
             return unavailable
 
@@ -189,7 +204,7 @@ class EventWiseApp:
             if initial_departure < now:
                 initial_departure = now
             first_route = self._geolocation_service.get_transit_route(
-                self._profile.home_postal_code, destination_postal_code, initial_departure
+                origin_postal_code, destination_postal_code, initial_departure
             )
             first_assessment = self._travel_evaluator.evaluate(event_start, first_route)
             proposed_departure = first_assessment.recommended_departure
@@ -199,7 +214,7 @@ class EventWiseApp:
 
             # Transit schedules depend on departure time, so check the proposed time.
             checked_route = self._geolocation_service.get_transit_route(
-                self._profile.home_postal_code, destination_postal_code, proposed_departure
+                origin_postal_code, destination_postal_code, proposed_departure
             )
             assessment = self._travel_evaluator.evaluate(event_start, checked_route)
             # Keep the departure we actually checked together with its returned arrival.

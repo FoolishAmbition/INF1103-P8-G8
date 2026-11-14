@@ -46,6 +46,38 @@ class TestEventTravelPrompts(unittest.TestCase):
                 self.manager._ask_text.side_effect = answers
                 self.assertIsNone(self.manager.collect_event_travel_info())
 
+    @patch("src.io_manager.questionary.select")
+    def test_home_choice_is_only_available_with_saved_home(self, select_prompt):
+        select_prompt.return_value.ask.return_value = "home"
+        self.assertEqual(self.manager.choose_event_travel_origin("012345"), "012345")
+        choices = select_prompt.call_args.kwargs["choices"]
+        self.assertIn("home", [choice.value for choice in choices])
+        select_prompt.return_value.ask.return_value = "skip"
+        self.assertEqual(self.manager.choose_event_travel_origin(""), "")
+        choices = select_prompt.call_args.kwargs["choices"]
+        self.assertNotIn("home", [choice.value for choice in choices])
+
+    @patch("src.io_manager.questionary.select")
+    def test_skip_and_cancel_do_not_ask_for_origin(self, select_prompt):
+        for choice, expected in (("skip", ""), ("cancel", None), (None, None)):
+            with self.subTest(choice=choice):
+                select_prompt.return_value.ask.return_value = choice
+                self.assertEqual(self.manager.choose_event_travel_origin("012345"), expected)
+                self.manager._ask_text.assert_not_called()
+
+    @patch("src.io_manager.questionary.select")
+    def test_alternate_origin_retries_invalid_input_and_preserves_zero(self, select_prompt):
+        select_prompt.return_value.ask.return_value = "alternate"
+        self.manager._ask_text.side_effect = ["ABC123", "12345", "012345"]
+        self.assertEqual(self.manager.choose_event_travel_origin(""), "012345")
+        self.assertEqual(self.manager.display_error.call_count, 2)
+
+    @patch("src.io_manager.questionary.select")
+    def test_alternate_origin_can_be_cancelled(self, select_prompt):
+        select_prompt.return_value.ask.return_value = "alternate"
+        self.manager._ask_text.return_value = None
+        self.assertIsNone(self.manager.choose_event_travel_origin("012345"))
+
 
 class TestEventTravelWorkflow(unittest.TestCase):
     def setUp(self):
@@ -62,6 +94,9 @@ class TestEventTravelWorkflow(unittest.TestCase):
         data_manager.return_value.load_events.return_value = []
         self.app = EventWiseApp()
         self.app._io_manager = Mock()
+        self.app._io_manager.choose_event_travel_origin.side_effect = (
+            lambda home_postal_code: home_postal_code
+        )
         self.app._ai_manager = Mock()
         self.app._geolocation_service = Mock()
         self.event_start = (datetime.now(SINGAPORE_TIMEZONE) + timedelta(days=10)).replace(
@@ -130,9 +165,8 @@ class TestEventTravelWorkflow(unittest.TestCase):
         self.app._handle_analyse_event()
         self.app._geolocation_service.get_transit_route.assert_not_called()
         assessment = self.app._io_manager.display_event_summary.call_args.kwargs["travel_assessment"]
-        self.assertEqual(assessment.status, "UNAVAILABLE")
-        self.assertIsNone(assessment.duration_minutes)
-        self.assertIn("Profile", assessment.error_message)
+        self.assertIsNone(assessment)
+        self.app._io_manager.collect_event_travel_info.assert_not_called()
         self.assertEqual(self.app.events[0].recommendation, "ATTEND")
 
     def test_provider_failures_at_either_request_preserve_event(self):
@@ -150,6 +184,45 @@ class TestEventTravelWorkflow(unittest.TestCase):
                     self.assertIsNone(assessment.estimated_arrival)
                     self.assertEqual(assessment.error_message, "Safe provider failure.")
                     self.assertEqual(self.app.events[-1].recommendation, "ATTEND")
+
+    def test_skip_preserves_ai_event_without_any_geolocation_calls(self):
+        for home in ("012345", ""):
+            with self.subTest(home=home):
+                self.app.profile.home_postal_code = home
+                self.app._io_manager.choose_event_travel_origin.side_effect = None
+                self.app._io_manager.choose_event_travel_origin.return_value = ""
+                self.app._handle_analyse_event()
+                self.app._io_manager.collect_event_travel_info.assert_not_called()
+                self.assertEqual(self.app._geolocation_service.mock_calls, [])
+                self.assertEqual(self.app.events[-1].recommendation, "ATTEND")
+                self.assertEqual(self.app.profile.home_postal_code, home)
+
+    def test_alternate_origin_is_used_for_both_requests_without_changing_profile(self):
+        for home in ("012345", ""):
+            with self.subTest(home=home):
+                self.app.profile.home_postal_code = home
+                self.app._io_manager.choose_event_travel_origin.side_effect = None
+                self.app._io_manager.choose_event_travel_origin.return_value = "023456"
+                self.app._geolocation_service.get_transit_route.reset_mock()
+                self.app._geolocation_service.get_transit_route.side_effect = [
+                    self.first_route, self.checked_route
+                ]
+                self.app._handle_analyse_event()
+                requests = self.app._geolocation_service.get_transit_route.call_args_list
+                self.assertEqual(len(requests), 2)
+                self.assertEqual([call.args[0] for call in requests], ["023456", "023456"])
+                self.assertEqual(self.app.profile.home_postal_code, home)
+                self.app._data_manager.save_profile.assert_not_called()
+                self.assertEqual(self.app.events[-1].recommendation, "ATTEND")
+
+    def test_cancel_at_origin_choice_stops_event_submission(self):
+        self.app._io_manager.choose_event_travel_origin.side_effect = None
+        self.app._io_manager.choose_event_travel_origin.return_value = None
+        self.app._handle_analyse_event()
+        self.app._io_manager.collect_event_travel_info.assert_not_called()
+        self.app._ai_manager.analyze_event.assert_not_called()
+        self.assertEqual(self.app._geolocation_service.mock_calls, [])
+        self.assertEqual(self.app.events, [])
 
     def test_invalid_route_becomes_unavailable(self):
         self.first_route.duration_minutes = -1
