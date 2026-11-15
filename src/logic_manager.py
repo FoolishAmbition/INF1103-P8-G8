@@ -91,3 +91,8 @@ class LogicManager(BaseManager):
             "reason": self.generate_reason(recommendation, workload),
         }
         return summary, None
+
+    # -- BaseManager contract ------------------------------------------
+    def run(self) -> None:
+        """Entry point fulfilling the BaseManager abstract interface."""
+        return None

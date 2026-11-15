@@ -26,6 +26,14 @@ def validate_singapore_postal_code(postal_code: str) -> str:
     return postal_code
 
 
+class GeoLocationError(EventWiseError):
+    """A safe service failure, with a code callers can handle separately."""
+
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+
+
 class TransitRoute:
     """Store the distance, duration and scheduled times returned by OneMap."""
 
@@ -48,19 +56,118 @@ class TransitRoute:
             return NotImplemented
         return vars(self) == vars(other)
 
+    @classmethod
+    def from_onemap_response(cls, response: dict) -> "TransitRoute":
+        """Factory Method: Validate and construct a TransitRoute from OneMap API JSON.
 
-class GeoLocationError(EventWiseError):
-    """A safe service failure, with a code callers can handle separately."""
+        Encapsulates response schema validation, leg distance accumulation,
+        and unit conversion (meters->km, seconds->minutes, timestamps->datetimes).
+        """
+        if not isinstance(response, dict):
+            raise GeoLocationError("INVALID_RESPONSE", "OneMap returned invalid or incomplete data.")
 
-    def __init__(self, code, message):
-        super().__init__(message)
-        self.code = code
+        plan = response.get("plan")
+        if plan is None:
+            raise GeoLocationError("NO_ROUTE", "OneMap returned no transit itinerary.")
+        if not isinstance(plan, dict):
+            raise GeoLocationError("INVALID_RESPONSE", "OneMap returned invalid or incomplete data.")
+
+        itineraries = plan.get("itineraries")
+        if not isinstance(itineraries, list):
+            raise GeoLocationError("INVALID_RESPONSE", "OneMap returned invalid or incomplete data.")
+        if not itineraries:
+            raise GeoLocationError("NO_ROUTE", "OneMap returned no transit itinerary.")
+
+        itinerary = itineraries[0]
+        if not isinstance(itinerary, dict):
+            raise GeoLocationError("INVALID_RESPONSE", "OneMap returned invalid or incomplete data.")
+
+        duration_seconds = itinerary.get("duration")
+        start_time_ms = itinerary.get("startTime")
+        end_time_ms = itinerary.get("endTime")
+        legs = itinerary.get("legs")
+
+        # Validate numeric bounds and itinerary structure
+        if not cls._is_valid_number(duration_seconds, min_val=0, allow_zero=False):
+            raise GeoLocationError("INVALID_RESPONSE", "OneMap returned invalid or incomplete data.")
+        if not cls._is_valid_number(start_time_ms) or not cls._is_valid_number(end_time_ms):
+            raise GeoLocationError("INVALID_RESPONSE", "OneMap returned invalid or incomplete data.")
+        if end_time_ms <= start_time_ms:
+            raise GeoLocationError("INVALID_RESPONSE", "OneMap returned invalid or incomplete data.")
+        if not isinstance(legs, list) or not legs:
+            raise GeoLocationError("INVALID_RESPONSE", "OneMap returned invalid or incomplete data.")
+
+        distance_meters = cls._sum_leg_distances(legs)
+
+        try:
+            departure = datetime.fromtimestamp(start_time_ms / 1000, tz=SINGAPORE_TIMEZONE)
+            arrival = datetime.fromtimestamp(end_time_ms / 1000, tz=SINGAPORE_TIMEZONE)
+        except (ValueError, OverflowError, OSError):
+            raise GeoLocationError("INVALID_RESPONSE", "OneMap returned invalid or incomplete data.") from None
+
+        return cls(
+            distance_km=distance_meters / 1000,
+            duration_minutes=duration_seconds / 60,
+            departure_time=departure,
+            estimated_arrival=arrival,
+            provider="OneMap",
+        )
+
+    @classmethod
+    def _sum_leg_distances(cls, legs: list) -> float:
+        """Sum distance across all route legs, ensuring non-negative finite values."""
+        total_meters = 0.0
+        for leg in legs:
+            if not isinstance(leg, dict):
+                raise GeoLocationError("INVALID_RESPONSE", "OneMap returned invalid or incomplete data.")
+            leg_distance = leg.get("distance")
+            if not cls._is_valid_number(leg_distance, min_val=0, allow_zero=True):
+                raise GeoLocationError("INVALID_RESPONSE", "OneMap returned invalid or incomplete data.")
+            total_meters += leg_distance
+
+        if not math.isfinite(total_meters) or total_meters <= 0:
+            raise GeoLocationError("INVALID_RESPONSE", "OneMap returned invalid or incomplete data.")
+        return total_meters
+
+    @staticmethod
+    def _is_valid_number(value, min_val=None, allow_zero=True) -> bool:
+        """Return True if value is a real finite number (rejecting booleans)."""
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return False
+        try:
+            if not math.isfinite(value):
+                return False
+        except OverflowError:
+            return False
+
+        if min_val is not None:
+            if allow_zero and value < min_val:
+                return False
+            if not allow_zero and value <= min_val:
+                return False
+        return True
 
 
 class GeoLocationService:
     """Resolve postal codes and retrieve departure-based public transport routes."""
 
     BASE_URL = "https://www.onemap.gov.sg"
+
+    # Declarative HTTP status code mapping (Open/Closed Principle)
+    _HTTP_STATUS_ERRORS = {
+        401: ("AUTHENTICATION_ERROR", "OneMap authentication failed."),
+        403: ("AUTHENTICATION_ERROR", "OneMap authentication failed."),
+        429: ("QUOTA_EXCEEDED", "OneMap request limit was exceeded."),
+    }
+
+    # Declarative keyword matching rules for provider error classification
+    _PROVIDER_ERROR_RULES = [
+        (("token", "unauthor", "authentic", "access denied"), "AUTHENTICATION_ERROR", "OneMap authentication failed."),
+        (("quota", "limit exceeded", "too many requests"), "QUOTA_EXCEEDED", "OneMap request limit was exceeded."),
+        (("no route", "no transit", "path_not_found"), "NO_ROUTE", "OneMap returned no transit itinerary."),
+    ]
+
+    validate_postal_code = staticmethod(validate_singapore_postal_code)
 
     def __init__(self, token=None, opener=None, timeout_seconds=25):
         """Accept a token and an HTTP opener that tests can replace with a mock."""
@@ -70,9 +177,7 @@ class GeoLocationService:
         if isinstance(token, str):
             self._token = token.strip()
 
-        self._opener = opener
-        if opener is None:
-            self._opener = urlopen
+        self._opener = opener if opener is not None else urlopen
         if not self._is_number(timeout_seconds) or timeout_seconds <= 0:
             raise ValidationError("Request timeout must be a positive number.")
         self._timeout_seconds = timeout_seconds
@@ -122,26 +227,27 @@ class GeoLocationService:
         results = response.get("results")
         if not isinstance(results, list):
             raise self._invalid_response()
+
         for result in results:
             if not isinstance(result, dict):
                 raise self._invalid_response()
             if result.get("POSTAL") != postal_code:
                 continue
+
+            lat_val = result.get("LATITUDE")
+            lon_val = result.get("LONGITUDE")
+            if isinstance(lat_val, bool) or isinstance(lon_val, bool):
+                raise self._invalid_response()
+
             try:
-                # Search returns coordinates as strings, unlike itinerary numbers.
-                latitude = float(result["LATITUDE"])
-                longitude = float(result["LONGITUDE"])
+                lat = float(lat_val)
+                lon = float(lon_val)
+                if not (-90 <= lat <= 90 and -180 <= lon <= 180 and math.isfinite(lat) and math.isfinite(lon)):
+                    raise ValueError
+                return f"{lat},{lon}"
             except (KeyError, TypeError, ValueError, OverflowError):
                 raise self._invalid_response() from None
-            if isinstance(result["LATITUDE"], bool) or isinstance(result["LONGITUDE"], bool):
-                raise self._invalid_response()
-            if not math.isfinite(latitude) or not math.isfinite(longitude):
-                raise self._invalid_response()
-            if not -90 <= latitude <= 90:
-                raise self._invalid_response()
-            if not -180 <= longitude <= 180:
-                raise self._invalid_response()
-            return f"{latitude},{longitude}"
+
         raise GeoLocationError("LOCATION_NOT_FOUND", "No exact postal-code location was found.")
 
     def _request_json(self, path, params):
@@ -180,90 +286,37 @@ class GeoLocationService:
             self._raise_provider_error(data)
         return data
 
-    @staticmethod
-    def _check_http_status(status):
-        if status in (401, 403):
-            raise GeoLocationError("AUTHENTICATION_ERROR", "OneMap authentication failed.") from None
-        if status == 429:
-            raise GeoLocationError("QUOTA_EXCEEDED", "OneMap request limit was exceeded.") from None
-        if status != 200:
-            raise GeoLocationError("PROVIDER_ERROR", "OneMap request failed.") from None
+    @classmethod
+    def _check_http_status(cls, status):
+        """Map HTTP error status codes to safe domain exceptions."""
+        if status == 200:
+            return
+        code, message = cls._HTTP_STATUS_ERRORS.get(
+            status, ("PROVIDER_ERROR", "OneMap request failed.")
+        )
+        raise GeoLocationError(code, message)
 
-    @staticmethod
-    def _raise_provider_error(response):
-        # Inspect provider text for classification only; never return it to callers.
+    @classmethod
+    def _raise_provider_error(cls, response):
+        """Classify provider error payload into a sanitized domain exception."""
         text = str(response.get("error") or response.get("message")).lower()
-        authentication_words = ("token", "unauthor", "authentic", "access denied")
-        for word in authentication_words:
-            if word in text:
-                raise GeoLocationError("AUTHENTICATION_ERROR", "OneMap authentication failed.")
 
-        quota_words = ("quota", "limit exceeded", "too many requests")
-        for word in quota_words:
-            if word in text:
-                raise GeoLocationError("QUOTA_EXCEEDED", "OneMap request limit was exceeded.")
+        for keywords, code, message in cls._PROVIDER_ERROR_RULES:
+            if any(keyword in text for keyword in keywords):
+                raise GeoLocationError(code, message)
 
-        if "mode" in text:
-            for word in ("unsupported", "invalid", "not supported"):
-                if word in text:
-                    raise GeoLocationError("UNSUPPORTED_MODE", "OneMap could not provide public transport.")
+        if "mode" in text and any(w in text for w in ("unsupported", "invalid", "not supported")):
+            raise GeoLocationError("UNSUPPORTED_MODE", "OneMap could not provide public transport.")
 
-        for word in ("no route", "no transit", "path_not_found"):
-            if word in text:
-                raise GeoLocationError("NO_ROUTE", "OneMap returned no transit itinerary.")
         raise GeoLocationError("PROVIDER_ERROR", "OneMap rejected the request.")
 
     def _parse_transit_route(self, response):
-        """Validate the first itinerary and convert its units for EventWise."""
-        plan = response.get("plan")
-        if plan is None:
-            raise GeoLocationError("NO_ROUTE", "OneMap returned no transit itinerary.")
-        if not isinstance(plan, dict) or not isinstance(plan.get("itineraries"), list):
-            raise self._invalid_response()
-        itineraries = plan["itineraries"]
-        if not itineraries:
-            raise GeoLocationError("NO_ROUTE", "OneMap returned no transit itinerary.")
-        itinerary = itineraries[0]
-        if not isinstance(itinerary, dict):
-            raise self._invalid_response()
-        duration_seconds = itinerary.get("duration")
-        start_time_ms = itinerary.get("startTime")
-        end_time_ms = itinerary.get("endTime")
-        legs = itinerary.get("legs")
-        if not self._is_number(duration_seconds) or duration_seconds <= 0:
-            raise self._invalid_response()
-        if not self._is_number(start_time_ms):
-            raise self._invalid_response()
-        if not self._is_number(end_time_ms):
-            raise self._invalid_response()
-        if end_time_ms <= start_time_ms:
-            raise self._invalid_response()
-        if not isinstance(legs, list) or not legs:
-            raise self._invalid_response()
-        distance_meters = 0.0
-        for leg in legs:
-            if not isinstance(leg, dict):
-                raise self._invalid_response()
-            leg_distance_meters = leg.get("distance")
-            if not self._is_number(leg_distance_meters) or leg_distance_meters < 0:
-                raise self._invalid_response()
-            distance_meters += leg_distance_meters
-        if not math.isfinite(distance_meters) or distance_meters <= 0:
-            raise self._invalid_response()
-        try:
-            departure = datetime.fromtimestamp(start_time_ms / 1000, tz=SINGAPORE_TIMEZONE)
-            arrival = datetime.fromtimestamp(end_time_ms / 1000, tz=SINGAPORE_TIMEZONE)
-        except (ValueError, OverflowError, OSError):
-            raise self._invalid_response() from None
-        return TransitRoute(
-            distance_km=distance_meters / 1000,
-            duration_minutes=duration_seconds / 60,
-            departure_time=departure,
-            estimated_arrival=arrival,
-        )
+        """Delegate route parsing to TransitRoute factory method."""
+        return TransitRoute.from_onemap_response(response)
 
     @staticmethod
     def _is_number(value):
+        """Check if value is a finite number, excluding booleans."""
         if not isinstance(value, (int, float)) or isinstance(value, bool):
             return False
         try:
