@@ -41,35 +41,10 @@ function showResult(raw) {
   $('score-learning').textContent = event.learning === null ? '—' : `${event.learning}/5`;
   $('score-networking').textContent = event.networking === null ? '—' : `${event.networking}/5`;
   $('ai-reason').textContent = event.aiReasoning;
+  if (typeof syncPanelHeights === 'function') syncPanelHeights();
 }
-function renderHistory() {
-  const keyword = $('history-search').value.trim().toLowerCase();
-  const filtered = savedEvents.map(normaliseEvent).filter(e => (e.name + ' ' + e.description).toLowerCase().includes(keyword)).reverse();
-  $('event-count').textContent = `${savedEvents.length} event${savedEvents.length === 1 ? '' : 's'}`;
-  const container = $('history-list');
-  container.replaceChildren();
-  if (!filtered.length) {
-    const empty = document.createElement('div');
-    empty.className = 'empty-history';
-    empty.textContent = savedEvents.length ? 'No events match your search.' : 'Your analysed events will appear here. Start with an event on the left! ✿';
-    container.append(empty);
-    return;
-  }
-  filtered.forEach(event => {
-    const card = document.createElement('article');
-    card.className = 'history-item';
-    const top = document.createElement('div'); top.className = 'history-top';
-    const name = document.createElement('strong'); name.textContent = event.name;
-    const score = document.createElement('span'); score.className = 'history-score'; score.textContent = event.score === null ? '—' : `${event.score}/15`;
-    top.append(name, score);
-    const description = document.createElement('p'); description.textContent = event.description.length > 130 ? event.description.slice(0, 130) + '…' : event.description;
-    const bottom = document.createElement('div'); bottom.className = 'history-bottom';
-    const badge = document.createElement('span'); badge.className = 'mini-tag ' + badgeClass(event.recommendation); badge.textContent = event.recommendation;
-    bottom.append(badge);
-    card.append(top, description, bottom);
-    container.append(card);
-  });
-}
+// Handled by backend EventFilter integration; defined with active filter controls below.
+let renderHistory = async () => {};
 async function api(path, method = 'GET', data) {
   const response = await fetch(path, {
     method,
@@ -279,64 +254,80 @@ loadState();
     byId('ew-detail-close').focus();
   }
 
-  const scoreAsNumber = (score) => (typeof score === 'number' && Number.isFinite(score) ? score : null);
-  const labelFor = (raw) => String(raw.event_category ?? raw.category ?? raw.ai_scores?.event_category ?? raw.AI_Scores?.event_category ?? 'Uncategorised').trim() || 'Uncategorised';
-  const workloadFor = (raw) => {
-    const w = String(raw.workload || '').trim().toLowerCase();
-    return w === 'low' ? 'Low' : w === 'medium' ? 'Medium' : w === 'high' ? 'High' : 'Other';
-  };
-
-  // Preserve savedEvents, normaliseEvent and API loading from the original script.
-  // Extend the existing renderer so new records also appear immediately.
-  renderHistory = function () {
-    const keyword = byId('history-search').value.trim().toLocaleLowerCase();
-    const recommendation = byId('ew-recommendation-filter').value;
+  // Event filtering is owned by backend EventFilter via GET /api/events.
+  // renderHistory passes active filter parameters to the API and renders the result.
+  renderHistory = async function () {
+    const searchInput = byId('history-search');
+    const recSelect = byId('ew-recommendation-filter');
     const minInput = byId('ew-min-score');
-    const minScore = Math.min(15, Math.max(0, Number(minInput.value) || 0));
-    const records = savedEvents.map((raw) => ({ raw, event: normaliseEvent(raw) }));
-    const matched = records.filter(({ raw, event }) => {
-      const text = `${event.name} ${event.description} ${labelFor(raw)} ${event.reason}`.toLocaleLowerCase();
-      return text.includes(keyword) &&
-        (recommendation === 'ALL' || event.recommendation === recommendation) &&
-        (event.score !== null && event.score >= minScore || minScore === 0 && event.score === null);
-    }).reverse();
-    byId('event-count').textContent = `${savedEvents.length} event${savedEvents.length === 1 ? '' : 's'}`;
-    const list = byId('history-list');
-    list.replaceChildren();
-    if (!matched.length) {
-      const empty = document.createElement('div');
-      empty.className = 'empty-history';
-      empty.textContent = savedEvents.length ? 'No events match your filters.' : 'Your analysed events will appear here. Start with an event on the left!';
-      list.append(empty);
+
+    const keyword = searchInput ? searchInput.value.trim() : '';
+    const recommendation = recSelect ? recSelect.value : 'ALL';
+    const minScore = minInput ? Number(minInput.value) || 0 : 0;
+
+    const params = new URLSearchParams();
+    if (keyword) {
+      params.set('keyword', keyword);
     }
-    for (const {raw, event} of matched) {
-      const card = document.createElement('article');
-      card.className = 'history-item';
-      const top = document.createElement('div');
-      top.className = 'history-top';
-      const name = document.createElement('strong');
-      name.textContent = event.name;
-      const score = document.createElement('span');
-      score.className = 'history-score';
-      score.textContent = event.score === null ? '—' : `${event.score}/15`;
-      top.append(name, score);
-      const desc = document.createElement('p');
-      desc.textContent = event.description.length > 130 ? `${event.description.slice(0, 130)}…` : event.description;
-      const bottom = document.createElement('div');
-      bottom.className = 'history-bottom';
-      const badge = document.createElement('span');
-      badge.className = 'mini-tag ' + badgeClass(event.recommendation);
-      badge.textContent = event.recommendation;
-      const details = document.createElement('button');
-      details.type = 'button';
-      details.className = 'ew-detail-button';
-      details.textContent = 'View details ↗';
-      details.addEventListener('click', () => openDetails(raw));
-      bottom.append(badge, details);
-      card.append(top, desc, bottom);
-      list.append(card);
+    if (recommendation && recommendation !== 'ALL') {
+      params.set('recommended', recommendation);
     }
-    renderAnalytics();
+    if (minScore > 0) {
+      params.set('min_score', String(minScore));
+    }
+
+    try {
+      const query = params.toString();
+      const url = '/api/events' + (query ? `?${query}` : '');
+      const response = await api(url);
+      const events = response.events || (Array.isArray(response) ? response : []);
+
+      byId('event-count').textContent = `${events.length} event${events.length === 1 ? '' : 's'}`;
+      const list = byId('history-list');
+      list.replaceChildren();
+
+      if (!events.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-history';
+        empty.textContent = savedEvents.length
+          ? 'No events match your filters.'
+          : 'Your analysed events will appear here. Start with an event on the left!';
+        list.append(empty);
+      } else {
+        const displayEvents = [...events].reverse();
+        for (const raw of displayEvents) {
+          const event = normaliseEvent(raw);
+          const card = document.createElement('article');
+          card.className = 'history-item';
+          const top = document.createElement('div');
+          top.className = 'history-top';
+          const name = document.createElement('strong');
+          name.textContent = event.name;
+          const score = document.createElement('span');
+          score.className = 'history-score';
+          score.textContent = event.score === null ? '—' : `${event.score}/15`;
+          top.append(name, score);
+          const desc = document.createElement('p');
+          desc.textContent = event.description.length > 130 ? `${event.description.slice(0, 130)}…` : event.description;
+          const bottom = document.createElement('div');
+          bottom.className = 'history-bottom';
+          const badge = document.createElement('span');
+          badge.className = 'mini-tag ' + badgeClass(event.recommendation);
+          badge.textContent = event.recommendation;
+          const details = document.createElement('button');
+          details.type = 'button';
+          details.className = 'ew-detail-button';
+          details.textContent = 'View details ↗';
+          details.addEventListener('click', () => openDetails(raw));
+          bottom.append(badge, details);
+          card.append(top, desc, bottom);
+          list.append(card);
+        }
+      }
+      renderAnalytics();
+    } catch (err) {
+      console.error('Failed to load filtered events from backend:', err);
+    }
   };
 
   function element(tag, className, content) {
@@ -352,78 +343,101 @@ loadState();
     return s;
   }
 
-  function renderAnalytics() {
+  // Analytics metric aggregation is owned by backend AnalyticsReporter via GET /api/analytics.
+  // renderAnalytics fetches pre-computed statistics and renders the UI components.
+  async function renderAnalytics() {
     const root = byId('ew-analytics-content');
-    root.replaceChildren();
-    const records = savedEvents.map((raw) => ({ raw, value: normaliseEvent(raw) }));
-    if (!records.length) {
-      root.append(element('p', 'empty-history', 'Analyse an event to see your analytics here.'));
-      return;
+    if (!root) return;
+
+    try {
+      const response = await api('/api/analytics');
+      const data = response.analytics || response || {};
+
+      root.replaceChildren();
+      const total = data.total_events || 0;
+      if (!total) {
+        root.append(element('p', 'empty-history', 'Analyse an event to see your analytics here.'));
+        return;
+      }
+
+      const counts = data.recommendation_breakdown || {ATTEND: 0, MAYBE: 0, SKIP: 0};
+      const attendance = data.attendance_rate !== undefined ? `${data.attendance_rate}%` : '0.0%';
+
+      // 1. Overview
+      const overview = makeSection('Overview');
+      const stats = element('div', 'ew-stat-grid');
+      [
+        ['Analysed events', total],
+        ['Attendance rate', attendance],
+        ['ATTEND', counts.ATTEND || 0],
+        ['MAYBE', counts.MAYBE || 0],
+        ['SKIP', counts.SKIP || 0]
+      ].forEach(([label, val]) => {
+        const stat = element('div', 'ew-stat');
+        stat.append(element('span', '', label), element('strong', '', val));
+        stats.append(stat);
+      });
+      overview.append(stats);
+      root.append(overview);
+
+      // 2. Category distribution
+      const category = makeSection('Category distribution');
+      const categories = Array.isArray(data.categories) ? data.categories : [];
+      categories.forEach(({category: name, count, percentage}) => {
+        const row = element('div', 'ew-category-row');
+        row.append(element('span', '', name), element('strong', '', `${count} · ${percentage}%`));
+        const track = element('div', 'ew-bar-track');
+        const bar = element('div', 'ew-bar-fill');
+        bar.style.width = `${percentage}%`;
+        track.append(bar);
+        category.append(row, track);
+      });
+      root.append(category);
+
+      // 3. Workload vs recommendation matrix
+      const workload = makeSection('Workload vs recommendation');
+      const table = element('table', 'ew-matrix');
+      const thead = document.createElement('thead');
+      const header = document.createElement('tr');
+      ['Workload', 'ATTEND', 'MAYBE', 'SKIP', 'Total'].forEach((label) => header.append(element('th', '', label)));
+      thead.append(header);
+      table.append(thead);
+
+      const tbody = document.createElement('tbody');
+      const matrix = data.workload_breakdown || {};
+      ['Low', 'Medium', 'High'].forEach((w) => {
+        const rowData = matrix[w] || {ATTEND: 0, MAYBE: 0, SKIP: 0, total: 0};
+        const tr = document.createElement('tr');
+        tr.append(element('th', '', w));
+        ['ATTEND', 'MAYBE', 'SKIP'].forEach((rec) => tr.append(element('td', '', rowData[rec] || 0)));
+        tr.append(element('td', '', rowData.total || 0));
+        tbody.append(tr);
+      });
+      table.append(tbody);
+      const scroll = element('div', 'ew-table-scroll');
+      scroll.append(table);
+      workload.append(scroll);
+      root.append(workload);
+
+      // 4. Average scores
+      const averages = makeSection('Average scores');
+      const avgScores = data.average_scores || {};
+      const fields = [
+        ['Career relevance', 'career_relevance', 5],
+        ['Learning value', 'learning_value', 5],
+        ['Networking value', 'networking_value', 5],
+        ['Total event value', 'total_value', 15]
+      ];
+      for (const [label, key, max] of fields) {
+        const val = avgScores[key] !== undefined && avgScores[key] !== null ? avgScores[key] : '—';
+        const row = element('div', 'ew-average-row');
+        row.append(element('span', '', label), element('strong', '', `${val} / ${max}`));
+        averages.append(row);
+      }
+      root.append(averages);
+    } catch (err) {
+      console.error('Failed to load analytics from backend:', err);
     }
-    const total = records.length;
-    const counts = {ATTEND: 0, MAYBE: 0, SKIP: 0};
-    for (const {value} of records) if (Object.hasOwn(counts, value.recommendation)) counts[value.recommendation]++;
-    const attendance = total ? (counts.ATTEND / total * 100).toFixed(1) : '0.0';
-    const overview = makeSection('Overview');
-    const stats = element('div', 'ew-stat-grid');
-    [['Analysed events', total], ['Attendance rate', `${attendance}%`], ['ATTEND', counts.ATTEND], ['MAYBE', counts.MAYBE], ['SKIP', counts.SKIP]].forEach(([label, val]) => {
-      const stat = element('div', 'ew-stat');
-      stat.append(element('span', '', label), element('strong', '', val));
-      stats.append(stat);
-    });
-    overview.append(stats);
-    root.append(overview);
-
-    const category = makeSection('Category distribution');
-    const categoryCounts = new Map();
-    records.forEach(({raw}) => {
-      const key = labelFor(raw);
-      categoryCounts.set(key, (categoryCounts.get(key) || 0) + 1);
-    });
-    Array.from(categoryCounts.entries()).sort((a,b) => b[1]-a[1] || a[0].localeCompare(b[0])).forEach(([name, count]) => {
-      const row = element('div', 'ew-category-row');
-      row.append(element('span', '', name), element('strong', '', `${count} · ${(count / total * 100).toFixed(1)}%`));
-      const track = element('div', 'ew-bar-track');
-      const bar = element('div', 'ew-bar-fill');
-      bar.style.width = `${count / total * 100}%`;
-      track.append(bar);
-      category.append(row, track);
-    });
-    root.append(category);
-
-    const workload = makeSection('Workload vs recommendation');
-    const table = element('table', 'ew-matrix');
-    const thead = document.createElement('thead');
-    const header = document.createElement('tr');
-    ['Workload', 'ATTEND', 'MAYBE', 'SKIP', 'Total'].forEach((label) => header.append(element('th', '', label)));
-    thead.append(header);
-    table.append(thead);
-    const tbody = document.createElement('tbody');
-    ['Low', 'Medium', 'High'].forEach((w) => {
-      const matching = records.filter(({raw}) => workloadFor(raw) === w);
-      const tr = document.createElement('tr');
-      tr.append(element('th', '', w));
-      ['ATTEND', 'MAYBE', 'SKIP'].forEach((rec) => tr.append(element('td', '', matching.filter(({value}) => value.recommendation === rec).length)));
-      tr.append(element('td', '', matching.length));
-      tbody.append(tr);
-    });
-    table.append(tbody);
-    const scroll = element('div', 'ew-table-scroll');
-    scroll.append(table);
-    workload.append(scroll);
-    root.append(workload);
-
-    const averages = makeSection('Average scores');
-    const fields = [['Career relevance', 'career'], ['Learning value', 'learning'], ['Networking value', 'networking'], ['Total event value', 'score']];
-    for (const [label, key] of fields) {
-      const scores = records.map(({value}) => scoreAsNumber(value[key])).filter((n) => n !== null);
-      const average = scores.length ? (scores.reduce((a,b) => a+b, 0) / scores.length).toFixed(1) : '—';
-      const maximum = key === 'score' ? 15 : 5;
-      const row = element('div', 'ew-average-row');
-      row.append(element('span', '', label), element('strong', '', `${average} / ${maximum}`));
-      averages.append(row);
-    }
-    root.append(averages);
   }
 
   // Keep the existing two tabs working, and add a third without changing original JS.
@@ -447,6 +461,7 @@ loadState();
       analyticsTab.classList.remove('selected');
       analyticsTab.setAttribute('aria-selected', 'false');
     }
+    if (typeof syncPanelHeights === 'function') syncPanelHeights();
   };
   analyticsTab.addEventListener('click', () => selectTab('analytics'));
 
@@ -481,6 +496,7 @@ function updateGeoVisibility() {
   $('geo-origin-postal').required = choice === 'alternate';
   $('geo-destination-postal').required = enabled;
   $('geo-event-start').required = enabled;
+  if (typeof syncPanelHeights === 'function') syncPanelHeights();
 }
 $('geo-origin-choice').addEventListener('change', updateGeoVisibility);
 $('home-postal-code').addEventListener('input', updateGeoVisibility);
@@ -576,3 +592,28 @@ function renderTravelEstimate(travel) {
     content.append(warning);
   }
 }
+
+// Synchronize right panel height to follow the left panel on desktop
+function syncPanelHeights() {
+  const left = document.querySelector('.left-panel');
+  const right = document.querySelector('.right-panel');
+  if (!left || !right) return;
+
+  if (window.innerWidth > 900) {
+    const leftHeight = left.offsetHeight;
+    if (leftHeight > 0) {
+      right.style.height = `${leftHeight}px`;
+    }
+  } else {
+    right.style.height = '';
+  }
+}
+
+if (typeof ResizeObserver !== 'undefined') {
+  const leftPanel = document.querySelector('.left-panel');
+  if (leftPanel) {
+    new ResizeObserver(() => syncPanelHeights()).observe(leftPanel);
+  }
+}
+window.addEventListener('resize', syncPanelHeights);
+syncPanelHeights();
