@@ -88,9 +88,49 @@ class IOManager(BaseManager):
         }
         return data, None
 
+    def get_filter_params(self):
+        """
+        Collect and parse event filter query parameters from the web request.
+
+        Returns:
+            dict: Parsed query parameters with 'keyword', 'recommended', and 'min_score'.
+        """
+        keyword = request.args.get("keyword", "").strip() or None
+        recommended = request.args.get("recommended") or request.args.get("recommendation")
+        if recommended:
+            recommended = recommended.strip()
+            if recommended.upper() == "ALL":
+                recommended = None
+
+        min_score_raw = request.args.get("min_score")
+        min_score = None
+        if min_score_raw is not None and min_score_raw.strip() != "":
+            try:
+                min_score = int(min_score_raw)
+            except ValueError:
+                try:
+                    min_score = float(min_score_raw)
+                except ValueError:
+                    min_score = None
+
+        return {
+            "keyword": keyword,
+            "recommended": recommended,
+            "min_score": min_score,
+        }
+
     # ------------------------------------------------------------------
     # Sending Responses & Displaying Information (Output)
     # ------------------------------------------------------------------
+    def send_events(self, events):
+        """Format and send the filtered events list as JSON."""
+        events_list = [e.to_dict() if hasattr(e, "to_dict") else e for e in (events or [])]
+        return jsonify(events=events_list)
+
+    def send_analytics(self, analytics):
+        """Format and send the event analytics summary as JSON."""
+        return jsonify(analytics=analytics)
+
     def send_state(self, profile, events):
         """Format and send the application state (profile and events) as JSON."""
         profile_dict = profile.to_dict() if hasattr(profile, "to_dict") else (profile or {})

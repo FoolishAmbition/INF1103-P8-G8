@@ -11,7 +11,9 @@ from dotenv import load_dotenv
 from flask import Flask
 
 from src.ai_manager import AIManager
+from src.analytics_reporter import AnalyticsReporter
 from src.data_manager import DataManager
+from src.event_filter import EventFilter
 from src.exceptions import ValidationError
 from src.geolocation import GeoLocationService
 from src.io_manager import IOManager
@@ -39,6 +41,8 @@ class EventWise:
         self.geo_service = GeoLocationService()
         self.travel_evaluator = TravelEvaluator()
         self.journey_planner = JourneyPlanner(self.geo_service, self.travel_evaluator)
+        self.event_filter = EventFilter()
+        self.analytics_reporter = AnalyticsReporter()
 
         self._setup_routes()
 
@@ -46,6 +50,8 @@ class EventWise:
         """Register URL routes to their corresponding class methods."""
         self.app.add_url_rule("/", view_func=self.home, methods=["GET"])
         self.app.add_url_rule("/api/state", view_func=self.state, methods=["GET"])
+        self.app.add_url_rule("/api/events", view_func=self.get_events, methods=["GET"])
+        self.app.add_url_rule("/api/analytics", view_func=self.get_analytics, methods=["GET"])
         self.app.add_url_rule("/api/profile", view_func=self.save_profile, methods=["POST"])
         self.app.add_url_rule("/api/analyse", view_func=self.analyse, methods=["POST"])
 
@@ -131,6 +137,41 @@ class EventWise:
             profile = self._load_profile(db)
             events = self._load_events(db)
             return self.io_manager.send_state(profile, events)
+        except Exception as exc:
+            return self.io_manager.send_server_error(exc)
+        finally:
+            if storage is not None:
+                storage.close()
+
+    def get_events(self):
+        """Coordinate retrieving filtered events using EventFilter and IOManager."""
+        params = self.io_manager.get_filter_params()
+        storage = None
+        try:
+            storage, db = self._get_storage()
+            events = self._load_events(db)
+            event_filter = EventFilter(events)
+            filtered = event_filter.filter(
+                keyword=params.get("keyword"),
+                recommended=params.get("recommended"),
+                min_score=params.get("min_score"),
+            )
+            return self.io_manager.send_events(filtered)
+        except Exception as exc:
+            return self.io_manager.send_server_error(exc)
+        finally:
+            if storage is not None:
+                storage.close()
+
+    def get_analytics(self):
+        """Coordinate retrieving analytics metrics using AnalyticsReporter and IOManager."""
+        storage = None
+        try:
+            storage, db = self._get_storage()
+            events = self._load_events(db)
+            reporter = AnalyticsReporter(events)
+            summary = reporter.generate_summary()
+            return self.io_manager.send_analytics(summary)
         except Exception as exc:
             return self.io_manager.send_server_error(exc)
         finally:
