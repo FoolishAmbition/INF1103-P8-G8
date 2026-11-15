@@ -4,10 +4,13 @@ Keeps module-level analyze_event() wrapper for backward compatibility.
 """
 
 import json
+import logging
 
 from src.ai_client import GeminiClient, PromptBuilder
 from src.base_manager import BaseManager
 from src.exceptions import APIError, ResponseValidationError
+
+logger = logging.getLogger(__name__)
 
 ANALYSIS_SCHEMA = {
     "event_category": str,
@@ -50,8 +53,27 @@ class AIManager(BaseManager):
     def parse_response(self, raw: str) -> dict:
         try:
             data = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise ResponseValidationError(f"Non-JSON response: {exc}") from exc
+        except (json.JSONDecodeError, TypeError, UnicodeDecodeError) as exc:
+            response_length = None
+            empty = None
+            fenced = None
+            if isinstance(raw, (str, bytes, bytearray)):
+                response_length = len(raw)
+            if isinstance(raw, str):
+                empty = not raw.strip()
+                fenced = raw.lstrip().startswith("```")
+            line = column = position = None
+            if isinstance(exc, json.JSONDecodeError):
+                line, column, position = exc.lineno, exc.colno, exc.pos
+            # Never include raw text, prompts or exception tracebacks in diagnostics.
+            logger.warning(
+                "AI response JSON parsing failed response_type=%s length=%s "
+                "empty=%s fenced=%s line=%s column=%s position=%s",
+                type(raw).__name__, response_length, empty, fenced, line, column, position,
+            )
+            if isinstance(exc, json.JSONDecodeError):
+                raise ResponseValidationError(f"Non-JSON response: {exc}") from exc
+            raise ResponseValidationError("AI response did not contain valid JSON text.") from None
         if not self.validate_schema(data):
             raise ResponseValidationError("AI response failed schema validation.")
         return data
