@@ -14,7 +14,7 @@ from src.ai_manager import AIManager
 from src.analytics_reporter import AnalyticsReporter
 from src.data_manager import DataManager
 from src.event_filter import EventFilter
-from src.exceptions import ValidationError
+from src.exceptions import DatabaseError, ValidationError
 from src.geolocation import GeoLocationService
 from src.io_manager import IOManager
 from src.journey_planner import JourneyPlanner
@@ -33,7 +33,11 @@ load_dotenv(dotenv_path=env_path)
 class EventWise:
     """Main application orchestrator coordinating program logic and managers."""
 
-    def __init__(self, io_manager: IOManager | None = None):
+    def __init__(
+        self,
+        io_manager: IOManager | None = None,
+        data_manager: DataManager | None = None,
+    ):
         self.app = Flask(__name__)
         self.io_manager = io_manager or IOManager()
         self.ai_manager = AIManager()
@@ -43,6 +47,16 @@ class EventWise:
         self.journey_planner = JourneyPlanner(self.geo_service, self.travel_evaluator)
         self.event_filter = EventFilter()
         self.analytics_reporter = AnalyticsReporter()
+
+        # Wire DataManager once at startup
+        if data_manager is not None:
+            self.data_manager = data_manager
+        else:
+            try:
+                storage = MongoStorage()
+                self.data_manager = DataManager(storage=storage)
+            except DatabaseError:
+                self.data_manager = DataManager()
 
         self._setup_routes()
 
@@ -54,32 +68,6 @@ class EventWise:
         self.app.add_url_rule("/api/analytics", view_func=self.get_analytics, methods=["GET"])
         self.app.add_url_rule("/api/profile", view_func=self.save_profile, methods=["POST"])
         self.app.add_url_rule("/api/analyse", view_func=self.analyse, methods=["POST"])
-
-    def _get_storage(self):
-        """Create a fresh database connection and DataManager instance."""
-        storage = MongoStorage()
-        return storage, DataManager(storage=storage)
-
-    def _load_profile(self, data_manager: DataManager) -> StudentProfile:
-        """Load and deserialize the student profile entity from storage."""
-        stored = data_manager.load_profile()
-        if isinstance(stored, StudentProfile):
-            return stored
-        if isinstance(stored, dict):
-            return StudentProfile.from_dict(stored)
-        return StudentProfile()
-
-    def _load_events(self, data_manager: DataManager) -> list[EventRecord]:
-        """Load and deserialize event records from storage."""
-        raw_events = data_manager.load_events()
-        events = []
-        for obj in raw_events or []:
-            try:
-                event = obj if isinstance(obj, EventRecord) else EventRecord.from_dict(obj)
-                events.append(event)
-            except (TypeError, ValueError, KeyError):
-                continue
-        return events
 
     def assess_travel(self, travel: dict, profile: StudentProfile) -> dict:
         """Calculate public transit journey feasibility for event attendance."""
@@ -131,25 +119,18 @@ class EventWise:
 
     def state(self):
         """Coordinate retrieving profile and events, then returning via IOManager."""
-        storage = None
         try:
-            storage, db = self._get_storage()
-            profile = self._load_profile(db)
-            events = self._load_events(db)
+            profile = self.data_manager.get_profile()
+            events = self.data_manager.get_events()
             return self.io_manager.send_state(profile, events)
         except Exception as exc:
             return self.io_manager.send_server_error(exc)
-        finally:
-            if storage is not None:
-                storage.close()
 
     def get_events(self):
         """Coordinate retrieving filtered events using EventFilter and IOManager."""
         params = self.io_manager.get_filter_params()
-        storage = None
         try:
-            storage, db = self._get_storage()
-            events = self._load_events(db)
+            events = self.data_manager.get_events()
             event_filter = EventFilter(events)
             filtered = event_filter.filter(
                 keyword=params.get("keyword"),
@@ -159,24 +140,16 @@ class EventWise:
             return self.io_manager.send_events(filtered)
         except Exception as exc:
             return self.io_manager.send_server_error(exc)
-        finally:
-            if storage is not None:
-                storage.close()
 
     def get_analytics(self):
         """Coordinate retrieving analytics metrics using AnalyticsReporter and IOManager."""
-        storage = None
         try:
-            storage, db = self._get_storage()
-            events = self._load_events(db)
+            events = self.data_manager.get_events()
             reporter = AnalyticsReporter(events)
             summary = reporter.generate_summary()
             return self.io_manager.send_analytics(summary)
         except Exception as exc:
             return self.io_manager.send_server_error(exc)
-        finally:
-            if storage is not None:
-                storage.close()
 
     def save_profile(self):
         """Coordinate user profile input collection, validation, saving, and response."""
@@ -184,10 +157,8 @@ class EventWise:
         if error is not None:
             return error
 
-        storage = None
         try:
-            storage, db = self._get_storage()
-            existing_profile = self._load_profile(db)
+            existing_profile = self.data_manager.get_profile()
 
             home_postal = data["home_postal_code"]
             if home_postal is None:
@@ -198,13 +169,10 @@ class EventWise:
                 "interests": data["interests"],
                 "home_postal_code": home_postal,
             })
-            db.save_profile(profile.to_dict())
+            self.data_manager.save_profile(profile)
             return self.io_manager.send_profile(profile)
         except Exception as exc:
             return self.io_manager.send_server_error(exc)
-        finally:
-            if storage is not None:
-                storage.close()
 
     def analyse(self):
         """Coordinate event analysis, logic evaluation, travel planning, saving, and response."""
@@ -212,10 +180,8 @@ class EventWise:
         if error is not None:
             return error
 
-        storage = None
         try:
-            storage, db = self._get_storage()
-            profile = self._load_profile(db)
+            profile = self.data_manager.get_profile()
             if profile.is_empty():
                 return self.io_manager.send_error("Complete your Profile tab before analysing an event.", 400)
 
@@ -244,17 +210,17 @@ class EventWise:
                 workload=data["workload"],
             )
             record = EventRecord.from_dict(summary)
-            existing = self._load_events(db)
-            existing.append(record)
-            db.save_events([e.to_dict() for e in existing])
+            all_events = self.data_manager.add_event(record)
 
             travel_result = self.assess_travel(data.get("travel", {}), profile)
-            return self.io_manager.send_analysis(record, existing, travel_result)
+            return self.io_manager.send_analysis(record, all_events, travel_result)
         except Exception as exc:
             return self.io_manager.send_server_error(exc)
-        finally:
-            if storage is not None:
-                storage.close()
+
+    def close(self) -> None:
+        """Close DataManager connections."""
+        if hasattr(self.data_manager, "close") and callable(self.data_manager.close):
+            self.data_manager.close()
 
     def run(self, host: str = "0.0.0.0", port: int = 5000, debug: bool = False) -> None:
         """Start the Flask web application."""

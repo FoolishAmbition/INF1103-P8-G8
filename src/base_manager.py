@@ -13,9 +13,6 @@ class BaseManager(ABC):
     def name(self) -> str:
         return self._name
 
-    def describe(self) -> str:
-        return f"{self.__class__.__name__}(name={self._name!r})"
-
     @abstractmethod
     def run(self) -> None:
         """Entry point for the manager's primary responsibility."""
