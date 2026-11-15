@@ -1,7 +1,4 @@
-"""AIManager: composes GeminiClient + PromptBuilder; validates responses.
-
-Keeps module-level analyze_event() wrapper for backward compatibility.
-"""
+"""AIManager: composes GeminiClient + PromptBuilder; validates responses."""
 
 import json
 
@@ -48,8 +45,27 @@ class AIManager(BaseManager):
         return True
 
     def parse_response(self, raw: str) -> dict:
+        if not raw or not isinstance(raw, str):
+            raise ResponseValidationError("Empty response received from AI model.")
+
+        text = raw.strip()
+
+        # Strip markdown code fences if present (e.g. ```json ... ``` or ``` ... ```)
+        if "```" in text:
+            cleaned_lines = [
+                line for line in text.splitlines()
+                if not line.strip().startswith("```")
+            ]
+            text = "\n".join(cleaned_lines).strip()
+
+        # If there is conversational text before or after, extract the JSON object
+        if "{" in text and "}" in text:
+            start = text.find("{")
+            end = text.rfind("}") + 1
+            text = text[start:end]
+
         try:
-            data = json.loads(raw)
+            data = json.loads(text)
         except json.JSONDecodeError as exc:
             raise ResponseValidationError(f"Non-JSON response: {exc}") from exc
         if not self.validate_schema(data):
@@ -77,11 +93,3 @@ class AIManager(BaseManager):
         return None
 
 
-# ----------------------------------------------------------------------
-# Backward-compatible wrapper
-# ----------------------------------------------------------------------
-_default_ai = AIManager()
-
-
-def analyze_event(profile: dict, name: str, description: str):
-    return _default_ai.analyze_event(profile, name, description)

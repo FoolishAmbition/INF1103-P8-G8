@@ -18,11 +18,16 @@ class GeminiClient:
             raise APIError("API_KEY is not set.")
         try:
             from google import genai
+            from google.genai import types
             client = genai.Client(api_key=self._api_key)
             response = client.models.generate_content(
-                model=self._model_name, contents=prompt
+                model=self._model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                ),
             )
-            return response.text
+            return response.text or ""
         except Exception as exc:  # network/auth/API errors
             raise APIError(f"Gemini call failed: {exc}") from exc
 
@@ -30,7 +35,8 @@ class GeminiClient:
 class PromptBuilder:
     def build_schema_instruction(self) -> str:
         return (
-            "Respond ONLY with JSON containing exactly these keys: "
+            "Respond ONLY with a valid JSON object (no markdown, no ```json code fences). "
+            "The JSON object must contain exactly these keys: "
             "event_category (string), career_relevance (int 1-5), "
             "learning_value (int 1-5), networking_value (int 1-5), "
             "ai_reasoning (string)."
