@@ -101,6 +101,8 @@ $('event-form').addEventListener('submit', async (e) => {
     const result = await api('/api/analyse', 'POST', {
       event_name: $('event-name').value.trim(),
       event_description: $('event-description').value.trim(),
+      venue_name: $('venue-name').value.trim(),
+      venue_address: $('venue-address').value.trim(),
       workload: document.querySelector('input[name="workload"]:checked').value,
       travel: collectTravelInputs()
     });
@@ -257,6 +259,9 @@ loadState();
 
     const rawAi = raw.ai_scores || raw.AI_Scores || {};
     addText(container, 'Description', e.description);
+    addText(container, 'Venue', raw.venue_name);
+    addText(container, 'Address', raw.venue_address);
+    addText(container, 'Destination postal code', raw.destination_postal_code);
     addText(container, 'Category', raw.event_category ?? raw.category ?? rawAi.event_category);
     addText(container, 'Workload', raw.workload);
     addText(container, 'Priority', raw.priority ?? raw.event_priority);
@@ -265,12 +270,14 @@ loadState();
     addText(container, 'Networking value', e.networking === null ? 'Not available' : `${e.networking}/5`);
     addText(container, 'Recommendation reason', e.reason);
     addText(container, 'AI reasoning', e.aiReasoning);
-    if (raw.travel && raw.travel.status === 'AVAILABLE') {
-      addText(container, 'Public transport distance', formatGeoNumber(raw.travel.distance_km, 'km'));
-      addText(container, 'Travel duration', formatGeoNumber(raw.travel.duration_minutes, 'minutes'));
-      addText(container, 'Recommended departure', formatGeoDate(raw.travel.recommended_departure));
-      addText(container, 'Estimated arrival', formatGeoDate(raw.travel.estimated_arrival));
-    }
+    const journey = document.createElement('section');
+    journey.className = 'geo-travel-result';
+    const journeyHeading = document.createElement('h3');
+    journeyHeading.textContent = 'Estimate when analysed';
+    const journeyContent = document.createElement('div');
+    renderTravelContent(journeyContent, raw.travel_snapshot, true);
+    journey.append(journeyHeading, journeyContent);
+    container.append(journey);
 
     overlay.hidden = false;
     document.body.classList.add('ew-dialog-open');
@@ -332,6 +339,13 @@ loadState();
       details.addEventListener('click', () => openDetails(raw));
       bottom.append(badge, details);
       card.append(top, desc, bottom);
+      const venueDetails = [raw.venue_name, raw.venue_address, raw.destination_postal_code].filter(Boolean);
+      if (venueDetails.length) {
+        const venue = document.createElement('p');
+        venue.className = 'geo-history-venue';
+        venue.textContent = venueDetails.join(' · ');
+        card.insertBefore(venue, bottom);
+      }
       list.append(card);
     }
     renderAnalytics();
@@ -527,12 +541,23 @@ function formatGeoDate(value) {
 function renderTravelEstimate(travel) {
   const section = $('geo-travel-result');
   const content = $('geo-travel-content');
+  section.hidden = !travel || travel.status === 'SKIPPED';
+  renderTravelContent(content, travel);
+}
+
+function renderTravelContent(content, travel, historical = false) {
   content.replaceChildren();
   if (!travel || travel.status === 'SKIPPED') {
-    section.hidden = true;
+    if (historical) {
+      const message = document.createElement('p');
+      message.className = 'geo-hint';
+      message.textContent = travel
+        ? 'Travel planning was skipped for this event.'
+        : 'Travel details were not saved for this event.';
+      content.append(message);
+    }
     return;
   }
-  section.hidden = false;
   const add = (name, value) => {
     const line = document.createElement('div');
     line.className = 'geo-result-line';
@@ -550,13 +575,36 @@ function renderTravelEstimate(travel) {
     content.append(message);
     return;
   }
+  const timeCards = document.createElement('div');
+  timeCards.className = 'geo-time-cards';
+  for (const [labelText, value] of [
+    ['Suggested leave-by', travel.recommended_departure],
+    ['Estimated arrival', travel.estimated_arrival]
+  ]) {
+    const card = document.createElement('div');
+    card.className = 'geo-time-card';
+    const label = document.createElement('span');
+    label.textContent = labelText;
+    const time = document.createElement('strong');
+    time.textContent = formatGeoDate(value);
+    card.append(label, time);
+    timeCards.append(card);
+  }
+  content.append(timeCards);
+  const note = document.createElement('p');
+  note.className = 'geo-hint';
+  note.textContent = historical
+    ? 'Saved estimate in Singapore time. Transit schedules may have changed.'
+    : 'Estimated times use Singapore time (UTC+08:00).';
+  content.append(note);
   add('Travel mode', 'Public transport (OneMap)');
   add('Distance', formatGeoNumber(travel.distance_km, 'km'));
   add('Duration', formatGeoNumber(travel.duration_minutes, 'min'));
-  add('Recommended departure', formatGeoDate(travel.recommended_departure));
-  add('Estimated arrival', formatGeoDate(travel.estimated_arrival));
   if (travel.arrival_buffer_minutes !== null) {
     add('Arrival buffer', formatGeoNumber(travel.arrival_buffer_minutes, 'min'));
+  }
+  if (travel.preferred_travel_limit_minutes != null) {
+    add('Preferred travel limit', formatGeoNumber(travel.preferred_travel_limit_minutes, 'min'));
   }
   if (travel.feasibility === 'LONG_JOURNEY') {
     const warning = document.createElement('p');
