@@ -92,3 +92,32 @@
 .geo-unavailable {color:#8d4838;font-size:13px;line-height:1.5;}
 .geo-warning {font-size:13px;line-height:1.5;color:#8b5718;font-weight:600;}
 @media(max-width:520px){.geo-result-line{flex-direction:column;gap:3px}.geo-result-line strong{text-align:left}}
+
+/* ===== Right panel vertical fill ===== */
+#history-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+#history-panel .history-list {
+  flex: 1;
+  max-height: none;
+  min-height: 200px;
+  overflow-y: auto;
+}
+
+#profile-panel,
+#analytics-panel {
+  flex: 1;
+  min-height: 0;
+}
+
+.panel-footer {
+  display: none !important;
+}
+
+.empty-history {
+  margin: auto 0;
+}

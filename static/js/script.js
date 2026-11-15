@@ -109,6 +109,8 @@ $('event-form').addEventListener('submit', async (e) => {
     savedEvents = result.events || [...savedEvents, result.event];
     renderHistory();
     setMessage('form-message', '✓ Recommendation generated and saved!');
+    $('event-form').reset();
+    updateGeoVisibility();
   } catch (err) { setMessage('form-message', err.message, true); }
   finally { button.disabled = false; }
 });
