@@ -2,16 +2,18 @@
 
 import json
 
-from src.ai_client import GeminiClient, PromptBuilder
+from src.ai_client import GeminiClient
+from src.ai_scores import AIScores
 from src.base_manager import BaseManager
-from src.exceptions import APIError, ResponseValidationError
+from src.exceptions import APIError, ResponseValidationError, ValidationError
+from src.prompt_builder import PromptBuilder
 
-ANALYSIS_SCHEMA = {
-    "event_category": str,
-    "career_relevance": int,
-    "learning_value": int,
-    "networking_value": int,
-    "ai_reasoning": str,
+ANALYSIS_FIELDS = {
+    "event_category",
+    "career_relevance",
+    "learning_value",
+    "networking_value",
+    "ai_reasoning",
 }
 
 
@@ -33,15 +35,17 @@ class AIManager(BaseManager):
     def validate_schema(self, data: dict) -> bool:
         if not isinstance(data, dict):
             return False
-        for key, expected in ANALYSIS_SCHEMA.items():
-            if key not in data:
-                return False
-            if expected is int:
-                if type(data[key]) is not int or not (1 <= data[key] <= 5):
-                    return False
-            elif expected is str:
-                if not isinstance(data[key], str) or not data[key].strip():
-                    return False
+        if set(data) != ANALYSIS_FIELDS:
+            return False
+        if not all(
+            isinstance(data[field], str) and bool(data[field].strip())
+            for field in ("event_category", "ai_reasoning")
+        ):
+            return False
+        try:
+            AIScores.from_dict(data)
+        except ValidationError:
+            return False
         return True
 
     def parse_response(self, raw: str) -> dict:
@@ -70,7 +74,12 @@ class AIManager(BaseManager):
             raise ResponseValidationError(f"Non-JSON response: {exc}") from exc
         if not self.validate_schema(data):
             raise ResponseValidationError("AI response failed schema validation.")
-        return data
+        ai_scores = AIScores.from_dict(data)
+        return {
+            "event_category": data["event_category"],
+            "ai_scores": ai_scores,
+            "ai_reasoning": data["ai_reasoning"],
+        }
 
     def analyze_event(self, profile: dict, name: str, description: str):
         if not self._client.is_available():
@@ -88,8 +97,4 @@ class AIManager(BaseManager):
                 # schema errors are unlikely to fix on retry; break
                 break
         return None, last_error
-
-    def run(self) -> None:
-        return None
-
 

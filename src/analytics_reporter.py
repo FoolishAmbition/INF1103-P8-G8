@@ -15,37 +15,36 @@ class AnalyticsReporter:
     STANDARD_PRIORITIES = ("High", "Medium", "Low")
     STANDARD_WORKLOADS = ("Low", "Medium", "High")
 
-    def __init__(self, events=None):
-        """Initialise with an optional collection of events (EventRecord objects or dicts)."""
-        normalized = []
-        for e in events or []:
-            if isinstance(e, EventRecord):
-                normalized.append(e)
-            elif isinstance(e, dict):
-                try:
-                    normalized.append(EventRecord.from_dict(e))
-                except (TypeError, ValueError, KeyError):
-                    continue
-        self.events = normalized
+    def __init__(self, events: list[EventRecord] | None = None):
+        """Initialise with an optional collection of EventRecord objects."""
+        self._events: list[EventRecord] = list(events) if events is not None else []
 
-    def total_events(self, events=None) -> int:
+    @property
+    def events(self) -> list[EventRecord]:
+        return list(self._events)
+
+    def total_events(self, events: list[EventRecord] | None = None) -> int:
         """Return the total number of events."""
-        target = self.events if events is None else events
+        target = self._events if events is None else events
         return len(target)
 
-    def category_distribution(self, events=None) -> dict[str, int]:
+    def category_distribution(
+        self, events: list[EventRecord] | None = None
+    ) -> dict[str, int]:
         """Count how many events belong to each category.
 
         Returns a dict mapping category name to count, e.g. {"Workshop": 3}.
         """
-        target = self.events if events is None else events
+        target = self._events if events is None else events
         counts: dict[str, int] = {}
         for event in target:
             category = (event.event_category or "").strip() or "Uncategorised"
             counts[category] = counts.get(category, 0) + 1
         return counts
 
-    def recommendation_breakdown(self, events=None) -> dict[str, int]:
+    def recommendation_breakdown(
+        self, events: list[EventRecord] | None = None
+    ) -> dict[str, int]:
         """Count events for each recommendation status (ATTEND, MAYBE, SKIP)."""
         target = self.events if events is None else events
         counts = {rec: 0 for rec in self.STANDARD_RECOMMENDATIONS}
@@ -58,25 +57,12 @@ class AnalyticsReporter:
                 counts[rec] = counts.get(rec, 0) + 1
         return counts
 
-    def attendance_ratio(self, events=None) -> float:
-        """Return the ratio of ATTEND events to total events (0.0 to 1.0).
-
-        Returns 0.0 if there are no events.
-        """
-        target = self.events if events is None else events
-        total = len(target)
-        if total == 0:
-            return 0.0
-
-        attend_count = sum(1 for e in target if (e.recommendation or "").strip().upper() == "ATTEND")
-        return round(attend_count / total, 2)
-
-    def attendance_rate(self, events=None) -> float:
+    def attendance_rate(self, events: list[EventRecord] | None = None) -> float:
         """Return the percentage of ATTEND events to total events (0.0 to 100.0).
 
         Returns 0.0 if there are no events.
         """
-        target = self.events if events is None else events
+        target = self._events if events is None else events
         total = len(target)
         if total == 0:
             return 0.0
@@ -84,9 +70,11 @@ class AnalyticsReporter:
         attend_count = sum(1 for e in target if (e.recommendation or "").strip().upper() == "ATTEND")
         return round((attend_count / total) * 100, 1)
 
-    def priority_distribution(self, events=None) -> dict[str, int]:
+    def priority_distribution(
+        self, events: list[EventRecord] | None = None
+    ) -> dict[str, int]:
         """Count events for each priority level (High, Medium, Low)."""
-        target = self.events if events is None else events
+        target = self._events if events is None else events
         counts = {pri: 0 for pri in self.STANDARD_PRIORITIES}
 
         for event in target:
@@ -97,12 +85,14 @@ class AnalyticsReporter:
                 counts[priority] = counts.get(priority, 0) + 1
         return counts
 
-    def workload_vs_recommendation(self, events=None) -> dict[str, dict[str, int]]:
+    def workload_vs_recommendation(
+        self, events: list[EventRecord] | None = None
+    ) -> dict[str, dict[str, int]]:
         """Cross-tabulate events by workload (Low/Medium/High) and recommendation.
 
         Returns a nested dict mapping workload to recommendation counts and total.
         """
-        target = self.events if events is None else events
+        target = self._events if events is None else events
         table = {
             workload: {rec: 0 for rec in self.STANDARD_RECOMMENDATIONS}
             for workload in self.STANDARD_WORKLOADS
@@ -127,7 +117,9 @@ class AnalyticsReporter:
 
         return table
 
-    def average_scores(self, events=None) -> dict[str, float]:
+    def average_scores(
+        self, events: list[EventRecord] | None = None
+    ) -> dict[str, float]:
         """Calculate average scores for career, learning, networking, and total value.
 
         Returns 0.0 for any score if there are no events.
@@ -140,10 +132,6 @@ class AnalyticsReporter:
                 "learning_value": 0.0,
                 "networking_value": 0.0,
                 "total_value": 0.0,
-                "career": 0.0,
-                "learning": 0.0,
-                "networking": 0.0,
-                "score": 0.0,
             }
 
         career_sum = sum(e.career_relevance or 0 for e in target)
@@ -161,15 +149,13 @@ class AnalyticsReporter:
             "learning_value": learning_avg,
             "networking_value": networking_avg,
             "total_value": total_avg,
-            "career": career_avg,
-            "learning": learning_avg,
-            "networking": networking_avg,
-            "score": total_avg,
         }
 
-    def generate_summary(self, events=None) -> dict:
+    def generate_summary(
+        self, events: list[EventRecord] | None = None
+    ) -> dict:
         """Assemble all statistics into a complete summary dictionary."""
-        target = self.events if events is None else events
+        target = self._events if events is None else events
         total = self.total_events(target)
         counts = self.category_distribution(target)
 
@@ -185,7 +171,6 @@ class AnalyticsReporter:
         return {
             "total_events": total,
             "attendance_rate": self.attendance_rate(target),
-            "attendance_ratio": self.attendance_ratio(target),
             "recommendation_breakdown": self.recommendation_breakdown(target),
             "category_distribution": counts,
             "categories": categories,

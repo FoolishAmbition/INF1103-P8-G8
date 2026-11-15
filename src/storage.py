@@ -20,6 +20,10 @@ class PersistenceStrategy(ABC):
     def exists(self, key: str) -> bool:
         raise NotImplementedError
 
+    def close(self) -> None:
+        """Release resources when a storage backend maintains a connection."""
+        return None
+
 
 class JsonStorage(PersistenceStrategy):
     def __init__(self, base_dir: str = "data"):

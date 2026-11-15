@@ -1,10 +1,10 @@
 """Abstract base class shared by the four managers."""
 
-from abc import ABC, abstractmethod
+from abc import ABC
 
 
 class BaseManager(ABC):
-    """Every manager has a name, can describe itself, and exposes run()."""
+    """Shared base class for managers with a read-only name."""
 
     def __init__(self, name: str):
         self._name = name
@@ -12,8 +12,3 @@ class BaseManager(ABC):
     @property
     def name(self) -> str:
         return self._name
-
-    @abstractmethod
-    def run(self) -> None:
-        """Entry point for the manager's primary responsibility."""
-        raise NotImplementedError

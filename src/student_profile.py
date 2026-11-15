@@ -1,18 +1,18 @@
 from src.entity import Entity
 from src.exceptions import ValidationError
-from src.geolocation import validate_singapore_postal_code
+from src.geolocation_utils import GeoLocationUtils
 
 
-class StudentProfile(Entity):
+class StudentProfile(Entity, GeoLocationUtils):
     def __init__(self, field_of_study="", interests=None, home_postal_code=""):
-        self.field_of_study = self.clean_text(field_of_study, "field_of_study")
-        self.interests = []
+        self._field_of_study = self.clean_text(field_of_study, "field_of_study")
+        self._interests = []
         # Older saved profiles have no postal code. Empty means it is unset.
         if home_postal_code is None:
             home_postal_code = ""
         if home_postal_code != "":
-            validate_singapore_postal_code(home_postal_code)
-        self.home_postal_code = home_postal_code
+            self.validate_singapore_postal_code(home_postal_code)
+        self._home_postal_code = home_postal_code
 
         if interests is not None:
             if not isinstance(interests, (list, tuple, set)):
@@ -22,11 +22,23 @@ class StudentProfile(Entity):
             for item in interests:
                 text = self.clean_text(item, "interest")
                 if text != "" and not self.has_interest(text):
-                    self.interests.append(text)
+                    self._interests.append(text)
+
+    @property
+    def field_of_study(self):
+        return self._field_of_study
+
+    @property
+    def interests(self):
+        return list(self._interests)
+
+    @property
+    def home_postal_code(self):
+        return self._home_postal_code
 
     def has_interest(self, text):
         """Check if the interest is already in the list (ignores upper/lower case)."""
-        for existing in self.interests:
+        for existing in self._interests:
             if existing.lower() == text.lower():
                 return True
         return False
@@ -37,23 +49,23 @@ class StudentProfile(Entity):
             raise ValidationError("Interest cannot be empty.")
         if self.has_interest(text):
             raise ValidationError(f"That interest is already in your list: '{text}'.")
-        self.interests.append(text)
+        self._interests.append(text)
 
     def remove_interest(self, interest):
         text = self.clean_text(interest, "interest")
-        for existing in self.interests:
+        for existing in self._interests:
             if existing.lower() == text.lower():
-                self.interests.remove(existing)
+                self._interests.remove(existing)
                 return
         raise ValidationError(f"Interest '{interest}' not found in profile.")
 
     def is_empty(self):
-        return self.field_of_study == "" and len(self.interests) == 0
+        return self.field_of_study == "" and len(self._interests) == 0
 
     def to_dict(self):
         return {
             "field_of_study": self.field_of_study,
-            "interests": list(self.interests),
+            "interests": list(self._interests),
             "home_postal_code": self.home_postal_code,
         }
 

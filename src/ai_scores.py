@@ -4,9 +4,21 @@ from src.exceptions import ValidationError
 
 class AIScores(Entity):
     def __init__(self, career_relevance, learning_value, networking_value):
-        self.career_relevance = self.check_score(career_relevance, "career_relevance")
-        self.learning_value = self.check_score(learning_value, "learning_value")
-        self.networking_value = self.check_score(networking_value, "networking_value")
+        self._career_relevance = self.check_score(career_relevance, "career_relevance")
+        self._learning_value = self.check_score(learning_value, "learning_value")
+        self._networking_value = self.check_score(networking_value, "networking_value")
+
+    @property
+    def career_relevance(self):
+        return self._career_relevance
+
+    @property
+    def learning_value(self):
+        return self._learning_value
+
+    @property
+    def networking_value(self):
+        return self._networking_value
 
     @property
     def total_value(self):

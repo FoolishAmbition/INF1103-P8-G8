@@ -12,18 +12,13 @@ from src.event_record import EventRecord
 class EventFilter:
     """Filters a collection of events by recommendation, keyword, or minimum score."""
 
-    def __init__(self, events=None):
-        """Initialise with an optional collection of events (EventRecord objects or dicts)."""
-        normalized = []
-        for e in events or []:
-            if isinstance(e, EventRecord):
-                normalized.append(e)
-            elif isinstance(e, dict):
-                try:
-                    normalized.append(EventRecord.from_dict(e))
-                except (TypeError, ValueError, KeyError):
-                    continue
-        self.events = normalized
+    def __init__(self, events: list[EventRecord] | None = None):
+        """Initialise with an optional collection of EventRecord objects."""
+        self._events: list[EventRecord] = list(events) if events is not None else []
+
+    @property
+    def events(self) -> list[EventRecord]:
+        return list(self._events)
 
     def filter_by_recommendation(
         self,
@@ -35,7 +30,7 @@ class EventFilter:
         Matching is case-insensitive. If recommendation is empty, None, or 'ALL',
         returns all events without filtering.
         """
-        target = self.events if events is None else events
+        target = self._events if events is None else events
         if not recommendation or not isinstance(recommendation, str):
             return list(target)
 
@@ -55,7 +50,7 @@ class EventFilter:
         Search is case-insensitive. If keyword is empty or None,
         returns all events without filtering.
         """
-        target = self.events if events is None else events
+        target = self._events if events is None else events
         if not keyword or not isinstance(keyword, str):
             return list(target)
 
@@ -80,7 +75,7 @@ class EventFilter:
 
         If min_score is None, empty, non-numeric, or <= 0, returns all events.
         """
-        target = self.events if events is None else events
+        target = self._events if events is None else events
         if min_score is None:
             return list(target)
 
@@ -96,7 +91,6 @@ class EventFilter:
 
     def filter(
         self,
-        recommendation: str | None = None,
         keyword: str | None = None,
         min_score: int | float | None = None,
         events: list[EventRecord] | None = None,
@@ -104,14 +98,14 @@ class EventFilter:
     ) -> list[EventRecord]:
         """Apply multiple filter criteria together.
 
-        Accepts either 'recommendation' or 'recommended'. Any criterion left
-        as None or empty is skipped.
+        Any criterion left as None or empty is skipped.
         """
-        rec = recommended if recommended is not None else recommendation
-        results = self.events if events is None else events
+        results = self._events if events is None else events
 
-        if rec is not None and str(rec).strip():
-            results = self.filter_by_recommendation(str(rec).strip(), events=results)
+        if recommended is not None and str(recommended).strip():
+            results = self.filter_by_recommendation(
+                str(recommended).strip(), events=results
+            )
 
         if keyword is not None and str(keyword).strip():
             results = self.filter_by_keyword(str(keyword).strip(), events=results)

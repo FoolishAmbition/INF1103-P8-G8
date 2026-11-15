@@ -16,9 +16,13 @@ class GeminiClient:
     def call(self, prompt: str) -> str:
         if not self.is_available():
             raise APIError("API_KEY is not set.")
+
+        from google import genai
+        from google.genai import types
+        from google.genai.errors import APIError as GenAIAPIError
+        from httpx import TransportError
+
         try:
-            from google import genai
-            from google.genai import types
             client = genai.Client(api_key=self._api_key)
             response = client.models.generate_content(
                 model=self._model_name,
@@ -28,24 +32,5 @@ class GeminiClient:
                 ),
             )
             return response.text or ""
-        except Exception as exc:  # network/auth/API errors
+        except (TransportError, GenAIAPIError) as exc:
             raise APIError(f"Gemini call failed: {exc}") from exc
-
-
-class PromptBuilder:
-    def build_schema_instruction(self) -> str:
-        return (
-            "Respond ONLY with a valid JSON object (no markdown, no ```json code fences). "
-            "The JSON object must contain exactly these keys: "
-            "event_category (string), career_relevance (int 1-5), "
-            "learning_value (int 1-5), networking_value (int 1-5), "
-            "ai_reasoning (string)."
-        )
-
-    def build_analysis_prompt(self, profile: dict, name: str, description: str) -> str:
-        return (
-            f"Student profile: {profile}\n"
-            f"Event name: {name}\n"
-            f"Event description: {description}\n\n"
-            f"{self.build_schema_instruction()}"
-        )

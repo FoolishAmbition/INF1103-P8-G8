@@ -5,6 +5,8 @@ from src.entity import Entity
 from src.exceptions import ValidationError
 
 VALID_WORKLOADS = ("Low", "Medium", "High")
+VALID_PRIORITIES = ("Low", "Medium", "High")
+VALID_RECOMMENDATIONS = ("ATTEND", "MAYBE", "SKIP")
 
 
 class EventRecord(Entity):
@@ -23,64 +25,120 @@ class EventRecord(Entity):
         event_value=None,
     ):
         # Text fields
-        self.event_name = self.clean_text(event_name, "event_name")
-        self.event_description = self.clean_text(event_description, "event_description")
-        self.event_category = self.clean_text(event_category, "event_category")
-        self.ai_reasoning = self.clean_text(ai_reasoning, "ai_reasoning")
-        self.reason = self.clean_text(reason, "reason")
-        self.recommendation = self.clean_text(recommendation, "recommendation").upper()
+        self._event_name = self.clean_text(event_name, "event_name")
+        self._event_description = self.clean_text(event_description, "event_description")
+        self._event_category = self.clean_text(event_category, "event_category")
+        self._ai_reasoning = self.clean_text(ai_reasoning, "ai_reasoning")
+        self._reason = self.clean_text(reason, "reason")
+        self._recommendation = self.clean_text(recommendation, "recommendation")
+        if self._recommendation not in VALID_RECOMMENDATIONS:
+            raise ValidationError(
+                f"Invalid recommendation '{self._recommendation}'. "
+                f"Allowed: {VALID_RECOMMENDATIONS}."
+            )
 
-        # Workload: must be Low, Medium or High (empty means Low)
-        workload_text = self.clean_text(workload, "workload").capitalize()
-        if workload_text != "" and workload_text not in VALID_WORKLOADS:
-            raise ValidationError(f"Invalid workload '{workload}'. Allowed: {VALID_WORKLOADS}.")
-        if workload_text == "":
-            workload_text = "Low"
-        self.workload = workload_text
+        workload_text = self.clean_text(workload, "workload")
+        if workload_text not in VALID_WORKLOADS:
+            raise ValidationError(
+                f"Invalid workload '{workload_text}'. Allowed: {VALID_WORKLOADS}."
+            )
+        self._workload = workload_text
 
-        # AI scores: can be an AIScores object, a dict, or None
+        # Accept the domain object or its serialized form.
         if isinstance(ai_scores, dict):
             ai_scores = AIScores.from_dict(ai_scores)
         elif ai_scores is not None and not isinstance(ai_scores, AIScores):
             raise ValidationError(
                 f"ai_scores must be an AIScores or dict, got {type(ai_scores).__name__}."
             )
-        self.ai_scores = ai_scores
+        if ai_scores is None:
+            raise ValidationError("ai_scores is required for an EventRecord.")
+        self._ai_scores = ai_scores
 
-        # Timestamp: if nothing is given, use the current time
-        if isinstance(timestamp, str):
-            timestamp = timestamp.strip()
-        if timestamp is None or timestamp == "":
-            timestamp = datetime.now(timezone.utc).isoformat()
-        elif isinstance(timestamp, datetime):
-            timestamp = timestamp.isoformat()
-        elif not isinstance(timestamp, str):
+        self._timestamp = self._normalize_timestamp(timestamp)
+
+        if event_value is not None:
+            if not isinstance(event_value, int) or isinstance(event_value, bool):
+                raise ValidationError(
+                    f"event_value must be an integer, got {type(event_value).__name__}."
+                )
+            if not 3 <= event_value <= 15:
+                raise ValidationError("event_value must be between 3 and 15.")
+
+        total = ai_scores.total_value
+        if event_value is None:
+            event_value = total
+        elif event_value != total:
             raise ValidationError(
-                f"timestamp must be a datetime, string, or None, got {type(timestamp).__name__}."
+                f"event_value must equal the AIScores total ({total})."
             )
-        self.timestamp = timestamp
 
-        # event_value must be a whole number (or None)
-        if event_value is not None and (not isinstance(event_value, int) or isinstance(event_value, bool)):
+        priority = self.clean_text(priority, "priority")
+        if not priority:
+            if event_value >= 11:
+                priority = "High"
+            elif event_value >= 7:
+                priority = "Medium"
+            else:
+                priority = "Low"
+        if priority not in VALID_PRIORITIES:
             raise ValidationError(
-                f"event_value must be an int or None, got {type(event_value).__name__}."
+                f"Invalid priority '{priority}'. Allowed: {VALID_PRIORITIES}."
+            )
+        expected_priority = (
+            "High" if event_value >= 11 else "Medium" if event_value >= 7 else "Low"
+        )
+        if priority != expected_priority:
+            raise ValidationError(
+                f"Priority '{priority}' does not match event_value {event_value}."
             )
 
-        # Work out priority and event_value from the scores if they were not given
-        priority = self.clean_text(priority, "priority").capitalize()
-        if ai_scores is not None:
-            total = ai_scores.total_value
-            if event_value is None:
-                event_value = total
-            if priority == "":
-                if total >= 11:
-                    priority = "High"
-                elif total >= 7:
-                    priority = "Medium"
-                else:
-                    priority = "Low"
-        self.priority = priority
-        self.event_value = event_value
+        self._priority = priority
+        self._event_value = event_value
+
+    @property
+    def event_name(self):
+        return self._event_name
+
+    @property
+    def event_description(self):
+        return self._event_description
+
+    @property
+    def workload(self):
+        return self._workload
+
+    @property
+    def ai_scores(self):
+        return self._ai_scores
+
+    @property
+    def recommendation(self):
+        return self._recommendation
+
+    @property
+    def timestamp(self):
+        return self._timestamp
+
+    @property
+    def event_category(self):
+        return self._event_category
+
+    @property
+    def ai_reasoning(self):
+        return self._ai_reasoning
+
+    @property
+    def reason(self):
+        return self._reason
+
+    @property
+    def priority(self):
+        return self._priority
+
+    @property
+    def event_value(self):
+        return self._event_value
 
     @property
     def career_relevance(self):
@@ -93,6 +151,32 @@ class EventRecord(Entity):
     @property
     def networking_value(self):
         return self.ai_scores.networking_value if self.ai_scores else None
+
+    @staticmethod
+    def _normalize_timestamp(timestamp):
+        if timestamp is None:
+            value = datetime.now(timezone.utc)
+        elif isinstance(timestamp, datetime):
+            value = timestamp
+        elif isinstance(timestamp, str):
+            timestamp = timestamp.strip()
+            if not timestamp:
+                return datetime.now(timezone.utc).isoformat()
+            try:
+                value = datetime.fromisoformat(timestamp.strip())
+            except ValueError as exc:
+                raise ValidationError("timestamp must be a valid ISO 8601 datetime.") from exc
+        else:
+            raise ValidationError(
+                f"timestamp must be a datetime, string, or None, got {type(timestamp).__name__}."
+            )
+
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValidationError("timestamp must include timezone information.")
+        try:
+            return value.astimezone(timezone.utc).isoformat()
+        except (OverflowError, ValueError) as exc:
+            raise ValidationError("timestamp exceeds the supported date range.") from exc
 
     def to_dict(self):
         if self.ai_scores is not None:
@@ -111,9 +195,6 @@ class EventRecord(Entity):
             "reason": self.reason,
             "priority": self.priority,
             "event_value": self.event_value,
-            "career_relevance": self.career_relevance,
-            "learning_value": self.learning_value,
-            "networking_value": self.networking_value,
             "ai_scores": scores_dict,
         }
 
@@ -122,18 +203,11 @@ class EventRecord(Entity):
         cls.check_is_dict(data, "EventRecord")
 
         scores = data.get("ai_scores")
-        # Older format: the three scores are stored directly in the dict
-        if not isinstance(scores, dict) and data.get("career_relevance") is not None:
-            scores = {
-                "career_relevance": data.get("career_relevance"),
-                "learning_value": data.get("learning_value"),
-                "networking_value": data.get("networking_value"),
-            }
 
         return cls(
             event_name=data.get("event_name", ""),
             event_description=data.get("event_description", ""),
-            workload=data.get("workload", "Low"),
+            workload=data.get("workload"),
             ai_scores=scores,
             recommendation=data.get("recommendation", ""),
             timestamp=data.get("timestamp"),

@@ -3,64 +3,48 @@
 The class holds a RuleEngine and a ScoringStrategy (both injected).
 """
 
-import random
+from datetime import datetime
 
+from src.ai_scores import AIScores
 from src.base_manager import BaseManager
+from src.event_record import EventRecord
+from src.exceptions import ValidationError
+from src.geolocation import GeoLocationService
+from src.journey_planner import JourneyPlanner
 from src.rules import RuleEngine
 from src.scoring import ScoringStrategy, StandardScoringStrategy
-
-
-VALID_FIELDS = (
-    "event_category",
-    "career_relevance",
-    "learning_value",
-    "networking_value",
-    "ai_reasoning",
-)
-SCORE_FIELDS = ("career_relevance", "learning_value", "networking_value")
-
+from src.student_profile import StudentProfile
+from src.travel_assessment import TravelAssessment
+from src.travel_evaluator import TravelEvaluator
 
 class LogicManager(BaseManager):
     def __init__(
         self,
         rule_engine: RuleEngine | None = None,
         scoring: ScoringStrategy | None = None,
+        journey_planner: JourneyPlanner | None = None,
     ):
         super().__init__(name="logic")
-        self._rule_engine = rule_engine or RuleEngine()
-        self._scoring = scoring or StandardScoringStrategy()
-
-    # -- validation -----------------------------------------------------
-    def validate_ai_result(self, ai_result: dict) -> bool:
-        if not isinstance(ai_result, dict):
-            return False
-        for field in VALID_FIELDS:
-            if field not in ai_result:
-                return False
-        if not isinstance(ai_result["event_category"], str) or not ai_result[
-            "event_category"
-        ].strip():
-            return False
-        if not isinstance(ai_result["ai_reasoning"], str):
-            return False
-        for field in SCORE_FIELDS:
-            value = ai_result[field]
-            if type(value) is not int:   # rejects bool, float, str
-                return False
-            if not (1 <= value <= 5):
-                return False
-        return True
+        self._rule_engine = rule_engine if rule_engine is not None else RuleEngine()
+        self._scoring = scoring if scoring is not None else StandardScoringStrategy()
+        self._journey_planner = (
+            journey_planner
+            if journey_planner is not None
+            else JourneyPlanner(GeoLocationService(), TravelEvaluator())
+        )
 
     # -- scoring --------------------------------------------------------
-    def calculate_event_value(self, ai_result: dict) -> int:
-        return self._scoring.calculate(ai_result)
+    def calculate_event_value(self, ai_scores: AIScores) -> int:
+        return self._scoring.calculate(ai_scores)
 
     def event_priority(self, value: int) -> str:
         return self._scoring.priority_for(value)
 
     # -- decision -------------------------------------------------------
-    def generate_recommendation(self, ai_result: dict, workload: str) -> str:
-        return self._rule_engine.evaluate(ai_result, workload)
+    def generate_recommendation(
+        self, ai_scores: AIScores, workload: str, event_value: int
+    ) -> str:
+        return self._rule_engine.evaluate(ai_scores, workload, event_value)
 
     def generate_reason(self, recommendation: str, workload: str) -> str:
         if recommendation == "ATTEND":
@@ -74,25 +58,93 @@ class LogicManager(BaseManager):
         return "Low overall value relative to your workload — likely skip."
 
     # -- orchestration --------------------------------------------------
-    def generate_summary(self, ai_result: dict, workload: str):
-        if not self.validate_ai_result(ai_result):
-            return None, "Invalid AI response: missing or malformed fields."
-        value = self.calculate_event_value(ai_result)
-        recommendation = self.generate_recommendation(ai_result, workload)
+    def generate_summary(
+        self,
+        ai_scores: AIScores,
+        event_category: str,
+        ai_reasoning: str,
+        workload: str,
+    ) -> dict:
+        value = self.calculate_event_value(ai_scores)
+        recommendation = self.generate_recommendation(ai_scores, workload, value)
         summary = {
-            "event_category": ai_result["event_category"],
-            "career_relevance": ai_result["career_relevance"],
-            "learning_value": ai_result["learning_value"],
-            "networking_value": ai_result["networking_value"],
-            "ai_reasoning": ai_result["ai_reasoning"],
+            "event_category": event_category,
+            "career_relevance": ai_scores.career_relevance,
+            "learning_value": ai_scores.learning_value,
+            "networking_value": ai_scores.networking_value,
+            "ai_reasoning": ai_reasoning,
+            "ai_scores": ai_scores,
             "event_value": value,
             "priority": self.event_priority(value),
             "recommendation": recommendation,
             "reason": self.generate_reason(recommendation, workload),
         }
-        return summary, None
+        return summary
 
-    # -- BaseManager contract ------------------------------------------
-    def run(self) -> None:
-        """Entry point fulfilling the BaseManager abstract interface."""
-        return None
+    def create_event_record(
+        self,
+        ai_scores: AIScores,
+        event_category: str,
+        ai_reasoning: str,
+        event_name: str,
+        event_description: str,
+        workload: str,
+    ) -> EventRecord:
+        """Apply event rules and construct the resulting domain record."""
+        summary = self.generate_summary(
+            ai_scores, event_category, ai_reasoning, workload
+        )
+        summary.update(
+            event_name=event_name,
+            event_description=event_description,
+            workload=workload,
+        )
+        return EventRecord.from_dict(summary)
+
+    def profile_is_ready(self, profile: StudentProfile) -> bool:
+        """Return whether the profile has enough information for event analysis."""
+        return not profile.is_empty()
+
+    def assess_travel(
+        self, travel: dict, profile: StudentProfile
+    ) -> TravelAssessment | None:
+        """Coordinate travel assessment without exposing transit data to AI."""
+        event_start = None
+
+        def unavailable(error_code):
+            return TravelAssessment(
+                status="UNAVAILABLE",
+                feasibility="UNAVAILABLE",
+                arrival_buffer_minutes=self._journey_planner.arrival_buffer_minutes,
+                error_code=error_code,
+                event_start=event_start,
+                preferred_limit_minutes=self._journey_planner.preferred_limit_minutes,
+            )
+
+        if not isinstance(travel, dict):
+            return unavailable("INVALID_INPUT")
+
+        choice = travel.get("origin_choice", "skip")
+        if choice == "skip":
+            return None
+        if choice not in ("home", "alternate"):
+            return unavailable("INVALID_INPUT")
+
+        origin = profile.home_postal_code
+        if choice == "alternate":
+            origin = travel.get("origin_postal_code")
+
+        start_text = travel.get("event_start")
+        if not isinstance(start_text, str):
+            return unavailable("INVALID_INPUT")
+        try:
+            event_start = TravelEvaluator.to_singapore_datetime(
+                datetime.fromisoformat(start_text), "Event start"
+            )
+        except (ValueError, ValidationError):
+            return unavailable("INVALID_INPUT")
+
+        assessment, _ = self._journey_planner.plan(
+            origin, travel.get("destination_postal_code"), event_start
+        )
+        return assessment

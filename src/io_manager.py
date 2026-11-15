@@ -6,6 +6,10 @@ Handles all user Input and Output operations for the web GUI.
 from flask import current_app, jsonify, render_template, request
 
 from src.base_manager import BaseManager
+from src.event_record import EventRecord
+from src.student_profile import StudentProfile
+from src.travel_assessment import TravelAssessment
+from src.travel_result import TravelResult
 
 
 class IOManager(BaseManager):
@@ -13,10 +17,6 @@ class IOManager(BaseManager):
 
     def __init__(self, name: str = "IOManager"):
         super().__init__(name)
-
-    def run(self) -> None:
-        """Lifecycle entry point required by BaseManager."""
-        pass
 
     # ------------------------------------------------------------------
     # Web Presentation (Output)
@@ -96,7 +96,7 @@ class IOManager(BaseManager):
             dict: Parsed query parameters with 'keyword', 'recommended', and 'min_score'.
         """
         keyword = request.args.get("keyword", "").strip() or None
-        recommended = request.args.get("recommended") or request.args.get("recommendation")
+        recommended = request.args.get("recommended")
         if recommended:
             recommended = recommended.strip()
             if recommended.upper() == "ALL":
@@ -122,36 +122,45 @@ class IOManager(BaseManager):
     # ------------------------------------------------------------------
     # Sending Responses & Displaying Information (Output)
     # ------------------------------------------------------------------
-    def send_events(self, events):
+    def send_events(self, events: list[EventRecord]):
         """Format and send the filtered events list as JSON."""
-        events_list = [e.to_dict() if hasattr(e, "to_dict") else e for e in (events or [])]
-        return jsonify(events=events_list)
+        return jsonify(events=[event.to_dict() for event in events])
 
     def send_analytics(self, analytics):
         """Format and send the event analytics summary as JSON."""
         return jsonify(analytics=analytics)
 
-    def send_state(self, profile, events):
+    def send_state(self, profile: StudentProfile, events: list[EventRecord]):
         """Format and send the application state (profile and events) as JSON."""
-        profile_dict = profile.to_dict() if hasattr(profile, "to_dict") else (profile or {})
-        events_list = [e.to_dict() if hasattr(e, "to_dict") else e for e in (events or [])]
-        return jsonify(profile=profile_dict, events=events_list)
+        return jsonify(
+            profile=profile.to_dict(),
+            events=[event.to_dict() for event in events],
+        )
 
-    def send_profile(self, profile, message="Profile saved!"):
+    def send_profile(self, profile: StudentProfile, message="Profile saved!"):
         """Format and send the saved profile confirmation as JSON."""
-        profile_dict = profile.to_dict() if hasattr(profile, "to_dict") else profile
-        return jsonify(message=message, profile=profile_dict)
+        return jsonify(message=message, profile=profile.to_dict())
 
-    def send_analysis(self, record, events, travel_result=None, message="Analysis saved!"):
+    def send_analysis(
+        self,
+        record: EventRecord,
+        events: list[EventRecord],
+        travel_result=None,
+        message="Analysis saved!",
+    ):
         """Format and send the event analysis result as JSON."""
-        record_dict = record.to_dict() if hasattr(record, "to_dict") else record
-        events_list = [e.to_dict() if hasattr(e, "to_dict") else e for e in (events or [])]
         return jsonify(
             message=message,
-            event=record_dict,
-            events=events_list,
+            event=record.to_dict(),
+            events=[event.to_dict() for event in events],
             travel=travel_result,
         )
+
+    def sanitize_travel_result(
+        self, assessment: TravelAssessment | None = None
+    ) -> dict:
+        """Format travel data as a safe GUI response."""
+        return TravelResult(assessment).to_dict()
 
     def send_error(self, message, status_code=400):
         """Format and send an error response with an HTTP status code."""

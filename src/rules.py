@@ -7,13 +7,7 @@ Adding a new rule requires only a new subclass + registration (OCP).
 
 from abc import ABC, abstractmethod
 
-
-def _event_value(ai_result: dict) -> int:
-    return (
-        ai_result["career_relevance"]
-        + ai_result["learning_value"]
-        + ai_result["networking_value"]
-    )
+from src.ai_scores import AIScores
 
 
 class Rule(ABC):
@@ -22,7 +16,7 @@ class Rule(ABC):
     recommendation: str = ""
 
     @abstractmethod
-    def matches(self, ai_result: dict, workload: str) -> bool:
+    def matches(self, ai_scores: AIScores, workload: str, event_value: int) -> bool:
         raise NotImplementedError
 
     def get_recommendation(self) -> str:
@@ -32,10 +26,10 @@ class Rule(ABC):
 class TopScoresRule(Rule):
     recommendation = "ATTEND"
 
-    def matches(self, ai_result: dict, workload: str) -> bool:
+    def matches(self, ai_scores: AIScores, workload: str, event_value: int) -> bool:
         return (
-            ai_result["career_relevance"] >= 4
-            and ai_result["learning_value"] >= 4
+            ai_scores.career_relevance >= 4
+            and ai_scores.learning_value >= 4
             and workload in ("Low", "Medium")
         )
 
@@ -43,35 +37,35 @@ class TopScoresRule(Rule):
 class HighValueLowWorkloadRule(Rule):
     recommendation = "ATTEND"
 
-    def matches(self, ai_result: dict, workload: str) -> bool:
-        return _event_value(ai_result) >= 11 and workload in ("Low", "Medium")
+    def matches(self, ai_scores: AIScores, workload: str, event_value: int) -> bool:
+        return event_value >= 11 and workload in ("Low", "Medium")
 
 
 class HighValueHighWorkloadRule(Rule):
     recommendation = "MAYBE"
 
-    def matches(self, ai_result: dict, workload: str) -> bool:
-        return _event_value(ai_result) >= 11 and workload == "High"
+    def matches(self, ai_scores: AIScores, workload: str, event_value: int) -> bool:
+        return event_value >= 11 and workload == "High"
 
 
 class MidValueLowWorkloadRule(Rule):
     recommendation = "MAYBE"
 
-    def matches(self, ai_result: dict, workload: str) -> bool:
-        return _event_value(ai_result) >= 8 and workload in ("Low", "Medium")
+    def matches(self, ai_scores: AIScores, workload: str, event_value: int) -> bool:
+        return event_value >= 8 and workload in ("Low", "Medium")
 
 
 class MidValueHighWorkloadRule(Rule):
     recommendation = "SKIP"
 
-    def matches(self, ai_result: dict, workload: str) -> bool:
-        return _event_value(ai_result) >= 8 and workload == "High"
+    def matches(self, ai_scores: AIScores, workload: str, event_value: int) -> bool:
+        return event_value >= 8 and workload == "High"
 
 
 class LowValueRule(Rule):
     recommendation = "SKIP"
 
-    def matches(self, ai_result: dict, workload: str) -> bool:
+    def matches(self, ai_scores: AIScores, workload: str, event_value: int) -> bool:
         # Catch-all: fires only if nothing above matched.
         return True
 
@@ -96,8 +90,10 @@ class RuleEngine:
     def add_rule(self, rule: Rule) -> None:
         self._rules.append(rule)
 
-    def evaluate(self, ai_result: dict, workload: str) -> str:
+    def evaluate(
+        self, ai_scores: AIScores, workload: str, event_value: int
+    ) -> str:
         for rule in self._rules:
-            if rule.matches(ai_result, workload):
+            if rule.matches(ai_scores, workload, event_value):
                 return rule.get_recommendation()
         return "SKIP"
