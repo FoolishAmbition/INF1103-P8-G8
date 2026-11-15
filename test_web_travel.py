@@ -59,7 +59,8 @@ class TestWebTravel(unittest.TestCase):
         saved = self.db.save_events.call_args.args[0]
         self.assertEqual(len(saved), 1)
         self.assertNotIn("travel", saved[0])
-        self.assertNotIn("destination_postal_code", saved[0])
+        self.assertEqual(saved[0]["destination_postal_code"], "")
+        self.assertIsNone(saved[0]["travel_snapshot"])
         self.db.save_profile.assert_not_called()
         self.storage.close.assert_called_once_with()
         return result["travel"]

@@ -146,7 +146,8 @@ class TestEventTravelWorkflow(unittest.TestCase):
         self.assertEqual(assessment.feasibility, "WITHIN_LIMIT")
         self.assertEqual(len(self.app.events), 1)
         self.assertEqual(self.app.events[0].recommendation, "ATTEND")
-        self.assertNotIn("destination_postal_code", self.app.events[0].to_dict())
+        self.assertEqual(self.app.events[0].destination_postal_code, "")
+        self.assertIsNone(self.app.events[0].travel_snapshot)
         self.app._ai_manager.analyze_event.assert_called_once_with(
             {"field_of_study": "Software Engineering", "interests": ["Python"]},
             "Workshop", "Learn Python"

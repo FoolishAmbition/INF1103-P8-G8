@@ -6,9 +6,11 @@
 
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
+import json
 
 from src.exceptions import ValidationError
 from src.geolocation import validate_singapore_postal_code
+from src.travel_result import serialize_travel_result
 
 VALID_WORKLOADS = ("Low", "Medium", "High")
 
@@ -36,6 +38,21 @@ def check_is_dict(data, class_name):
         raise ValidationError(
             f"Cannot create {class_name}: expected dict, got {type(data).__name__}."
         )
+
+
+def copy_travel_snapshot(snapshot):
+    """Copy recognised result fields for storage, rejecting invalid JSON values."""
+    if snapshot is None:
+        return None
+    check_is_dict(snapshot, "travel snapshot")
+    if snapshot.get("status") not in ("SKIPPED", "AVAILABLE", "UNAVAILABLE"):
+        raise ValidationError("Travel snapshot must have a recognised status.")
+    allowed_fields = serialize_travel_result()
+    filtered = {key: value for key, value in snapshot.items() if key in allowed_fields}
+    try:
+        return json.loads(json.dumps(filtered, allow_nan=False))
+    except (TypeError, ValueError, OverflowError):
+        raise ValidationError("Travel snapshot must contain valid JSON values.") from None
 
 
 # -- Abstract base class ------------------------------------------------
@@ -178,6 +195,10 @@ class EventRecord(Entity):
         reason="",
         priority="",
         event_value=None,
+        venue_name="",
+        venue_address="",
+        destination_postal_code="",
+        travel_snapshot=None,
     ):
         # Text fields
         self.event_name = clean_text(event_name, "event_name")
@@ -186,6 +207,12 @@ class EventRecord(Entity):
         self.ai_reasoning = clean_text(ai_reasoning, "ai_reasoning")
         self.reason = clean_text(reason, "reason")
         self.recommendation = clean_text(recommendation, "recommendation").upper()
+        self.venue_name = clean_text(venue_name, "venue_name")
+        self.venue_address = clean_text(venue_address, "venue_address")
+        if destination_postal_code != "":
+            validate_singapore_postal_code(destination_postal_code)
+        self.destination_postal_code = destination_postal_code
+        self.travel_snapshot = copy_travel_snapshot(travel_snapshot)
 
         # Workload: must be Low, Medium or High (empty means Low)
         workload_text = clean_text(workload, "workload").capitalize()
@@ -272,6 +299,10 @@ class EventRecord(Entity):
             "learning_value": self.learning_value,
             "networking_value": self.networking_value,
             "ai_scores": scores_dict,
+            "venue_name": self.venue_name,
+            "venue_address": self.venue_address,
+            "destination_postal_code": self.destination_postal_code,
+            "travel_snapshot": copy_travel_snapshot(self.travel_snapshot),
         }
 
     @classmethod
@@ -299,6 +330,10 @@ class EventRecord(Entity):
             reason=data.get("reason", ""),
             priority=data.get("priority", ""),
             event_value=data.get("event_value"),
+            venue_name=data.get("venue_name", ""),
+            venue_address=data.get("venue_address", ""),
+            destination_postal_code=data.get("destination_postal_code", ""),
+            travel_snapshot=data.get("travel_snapshot"),
         )
 
     def __eq__(self, other):
