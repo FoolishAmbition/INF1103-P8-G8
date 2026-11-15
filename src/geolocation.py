@@ -3,6 +3,7 @@
 import json
 import math
 import os
+from copy import deepcopy
 from datetime import datetime
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -36,12 +37,15 @@ class TransitRoute:
         departure_time,
         estimated_arrival,
         provider="OneMap",
+        legs=None,
     ):
         self.distance_km = distance_km
         self.duration_minutes = duration_minutes
         self.departure_time = departure_time
         self.estimated_arrival = estimated_arrival
         self.provider = provider
+        # Service details stay in memory; callers must not persist origin geometry.
+        self.legs = deepcopy(legs)
 
     def __eq__(self, other):
         if type(other) is not type(self):
@@ -260,7 +264,46 @@ class GeoLocationService:
             duration_minutes=duration_seconds / 60,
             departure_time=departure,
             estimated_arrival=arrival,
+            legs=[self._parse_leg(leg) for leg in legs],
         )
+
+    def _parse_leg(self, leg):
+        """Keep selected optional fields; bad detail must not discard a valid summary."""
+        mode = leg.get("mode")
+        if mode not in ("WALK", "BUS", "SUBWAY", "RAIL", "TRAM", "FERRY"):
+            mode = None
+        duration = leg.get("duration")
+        duration_minutes = None
+        if self._is_number(duration) and duration >= 0:
+            duration_minutes = duration / 60
+        geometry = leg.get("legGeometry")
+        points = None
+        if isinstance(geometry, dict):
+            candidate = geometry.get("points")
+            # Encoded polylines use ASCII 63..126. This checks encoding shape,
+            # not decoded coordinates; map rendering needs separate validation.
+            if isinstance(candidate, str) and candidate and all(63 <= ord(c) <= 126 for c in candidate):
+                points = candidate
+        return {
+            "mode": mode,
+            "distance_km": leg["distance"] / 1000,
+            "duration_minutes": duration_minutes,
+            "route": self._optional_text(leg.get("route")),
+            "from_name": self._place_name(leg.get("from")),
+            "to_name": self._place_name(leg.get("to")),
+            "geometry_points": points,
+        }
+
+    @staticmethod
+    def _optional_text(value):
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        return None
+
+    def _place_name(self, place):
+        if isinstance(place, dict):
+            return self._optional_text(place.get("name"))
+        return None
 
     @staticmethod
     def _is_number(value):

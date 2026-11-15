@@ -41,6 +41,29 @@ class TestTravelResult(unittest.TestCase):
         self.assertEqual(result["estimated_arrival"], "2027-01-01T00:05:00+08:00")
         self.assertEqual(self.assessment.estimated_arrival.tzinfo, timezone.utc)
 
+    def test_leg_serialization_excludes_geometry_and_arbitrary_fields(self):
+        self.route.legs = [{"mode": "BUS", "duration_minutes": 0, "distance_km": 0,
+                            "route": " 42 ", "from_name": "Stop A", "to_name": "Stop B",
+                            "geometry_points": "PRIVATE_GEOMETRY", "token": "PRIVATE_TOKEN"}]
+        assessment = self.evaluator.evaluate(self.start, self.route)
+        self.route.legs[0]["route"] = "changed"
+        result = serialize_travel_result(assessment)
+        self.assertEqual(result["legs"], [{"mode": "BUS", "duration_minutes": 0,
+                         "distance_km": 0, "route": "42", "from_name": "Stop A", "to_name": "Stop B"}])
+        self.assertNotIn("PRIVATE_", json.dumps(result))
+        result["legs"][0]["route"] = "client edit"
+        self.assertEqual(assessment.legs[0]["route"], " 42 ")
+
+    def test_malformed_optional_leg_fields_remain_json_safe(self):
+        for value in (True, -1, float("inf"), float("nan"), "5", 10 ** 400):
+            self.assessment.legs = [None, {"mode": {}, "duration_minutes": value,
+                "distance_km": value, "route": [], "from_name": 123, "to_name": " "}]
+            with self.subTest(value=value):
+                result = serialize_travel_result(self.assessment)
+                self.assertEqual(result["legs"], [{"mode": None, "duration_minutes": None,
+                    "distance_km": None, "route": None, "from_name": None, "to_name": None}])
+                json.dumps(result, allow_nan=False)
+
     def test_skip_and_unavailable_have_null_journey_fields_and_same_keys(self):
         skipped = serialize_travel_result()
         unavailable = serialize_travel_result(self.evaluator.evaluate(self.start))

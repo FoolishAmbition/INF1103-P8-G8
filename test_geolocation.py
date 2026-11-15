@@ -15,6 +15,7 @@ from src.exceptions import ValidationError
 from src.geolocation import (
     GeoLocationError,
     GeoLocationService,
+    TransitRoute,
     SINGAPORE_TIMEZONE,
     validate_singapore_postal_code,
 )
@@ -135,6 +136,76 @@ class TestOneMapTransitService(unittest.TestCase):
             request_path = urlparse(call.args[0].full_url).path
             paths.append(request_path)
         self.assertEqual(paths, ["/api/common/elastic/search"] * 2 + ["/api/public/routingsvc/route"])
+
+    def test_leg_details_preserve_order_units_and_selected_fields(self):
+        data = copy.deepcopy(self.route)
+        legs = []
+        for mode, seconds, metres in (("WALK", 60, 100), ("BUS", 600, 3000), ("SUBWAY", 735, 1350.9)):
+            legs.append({
+                "mode": mode, "duration": seconds, "distance": metres,
+                "route": "  Example service  ",
+                "from": {"name": " Example start ", "lat": 1.3},
+                "to": {"name": "Example end"},
+                "legGeometry": {"points": "_p~iF~ps|U_ulLnnqC_mqNvxq`@"},
+                "untrusted_extra": "not copied",
+            })
+        data["plan"]["itineraries"][0]["legs"] = legs
+        result = self.service._parse_transit_route(data)
+        self.assertEqual([leg["mode"] for leg in result.legs], ["WALK", "BUS", "SUBWAY"])
+        self.assertEqual(result.legs[0]["duration_minutes"], 1)
+        self.assertEqual(result.legs[1]["distance_km"], 3)
+        self.assertEqual(result.legs[1]["route"], "Example service")
+        self.assertEqual(result.legs[0]["from_name"], "Example start")
+        self.assertEqual(result.legs[0]["to_name"], "Example end")
+        self.assertEqual(result.legs[0]["geometry_points"], legs[0]["legGeometry"]["points"])
+        self.assertEqual(set(result.legs[0]), {"mode", "duration_minutes", "distance_km", "route", "from_name", "to_name", "geometry_points"})
+        self.assertAlmostEqual(result.distance_km, 4.4509)
+        self.assertEqual(result.duration_minutes, 23.25)
+        self.assertEqual(result.estimated_arrival, self.end)
+        legs[0]["from"]["name"] = "changed provider payload"
+        self.assertEqual(result.legs[0]["from_name"], "Example start")
+
+    def test_legacy_minimal_legs_have_unknown_optional_details(self):
+        result = self.service._parse_transit_route(self.route)
+        self.assertEqual(len(result.legs), 2)
+        self.assertAlmostEqual(result.legs[0]["distance_km"], 0.4509)
+        self.assertEqual(result.legs[0], {
+            "mode": None, "duration_minutes": None, "distance_km": 450.9 / 1000,
+            "route": None, "from_name": None, "to_name": None, "geometry_points": None,
+        })
+
+    def test_malformed_optional_leg_fields_preserve_valid_summary(self):
+        invalid_details = [
+            {"mode": {}, "duration": True, "route": 123, "from": [], "to": {"name": []}, "legGeometry": []},
+            {"mode": "UNKNOWN", "duration": -1, "route": "  ", "from": None, "to": None, "legGeometry": {"points": "bad space"}},
+            {"duration": float("nan"), "legGeometry": {"points": 123}},
+            {"duration": float("inf"), "legGeometry": {"points": "\u00e9"}},
+            {"duration": "60", "legGeometry": {"points": ""}},
+            {"duration": 10 ** 400, "legGeometry": {"points": "\n"}},
+        ]
+        for details in invalid_details:
+            with self.subTest(details=details):
+                data = copy.deepcopy(self.route)
+                data["plan"]["itineraries"][0]["legs"][0].update(details)
+                result = self.service._parse_transit_route(data)
+                self.assertAlmostEqual(result.distance_km, 4.4509)
+                for key in ("mode", "duration_minutes", "route", "from_name", "to_name", "geometry_points"):
+                    self.assertIsNone(result.legs[0][key])
+
+    def test_zero_duration_and_distance_are_valid_for_an_optional_leg(self):
+        data = copy.deepcopy(self.route)
+        data["plan"]["itineraries"][0]["legs"][0].update(distance=0, duration=0, mode="WALK")
+        result = self.service._parse_transit_route(data)
+        self.assertEqual(result.legs[0]["duration_minutes"], 0)
+        self.assertEqual(result.legs[0]["distance_km"], 0)
+
+    def test_route_constructor_keeps_legacy_calls_and_copies_leg_details(self):
+        legacy = TransitRoute(1, 2, self.start, self.end)
+        self.assertIsNone(legacy.legs)
+        legs = [{"mode": "WALK"}]
+        route = TransitRoute(1, 2, self.start, self.end, legs=legs)
+        legs[0]["mode"] = "BUS"
+        self.assertEqual(route.legs, [{"mode": "WALK"}])
 
     def test_utc_departure_converts_to_next_singapore_date(self):
         self.prepare()

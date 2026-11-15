@@ -77,6 +77,33 @@ class TestWebTravel(unittest.TestCase):
         self.service_class.assert_not_called()
         self.db.save_events.assert_called_once()
 
+    def test_current_steps_use_rechecked_route_and_are_not_saved(self):
+        self.first.legs = [{"mode": "BUS", "from_name": "INITIAL_ROUTE_SENTINEL"}]
+        self.checked.legs = [{
+            "mode": "SUBWAY", "route": "Example line", "duration_minutes": 40,
+            "distance_km": 13, "from_name": "PRIVATE_ORIGIN_SENTINEL",
+            "to_name": "Example destination", "geometry_points": "GEOMETRY_SENTINEL",
+            "token": "TOKEN_SENTINEL",
+        }]
+        self.payload["travel"] = self.travel
+        response = self.client.post("/api/analyse", json=self.payload)
+        self.assertEqual(response.status_code, 200)
+        result = response.get_json()
+        self.assertEqual(result["travel"]["legs"][0]["mode"], "SUBWAY")
+        self.assertEqual(result["travel"]["legs"][0]["from_name"], "PRIVATE_ORIGIN_SENTINEL")
+        self.assertEqual(result["travel"]["estimated_arrival"], self.checked.estimated_arrival.isoformat())
+        for sentinel in ("INITIAL_ROUTE_SENTINEL", "GEOMETRY_SENTINEL", "TOKEN_SENTINEL"):
+            self.assertNotIn(sentinel, json.dumps(result))
+        saved = self.db.save_events.call_args.args[0]
+        self.assertIsNone(saved[0]["travel_snapshot"]["legs"])
+        self.assertNotIn("PRIVATE_ORIGIN_SENTINEL", json.dumps(saved))
+        self.assertEqual(result["event"], saved[0])
+        self.db.load_events.return_value = saved
+        state = self.client.get("/api/state").get_json()
+        self.assertIsNone(state["events"][0]["travel_snapshot"]["legs"])
+        self.assertNotIn("PRIVATE_ORIGIN_SENTINEL", json.dumps(state))
+        self.assertEqual(self.service.get_transit_route.call_count, 2)
+
     def test_explicit_skip_ignores_unused_travel_fields(self):
         result = self.submit({
             "origin_choice": "skip", "event_start": "invalid",

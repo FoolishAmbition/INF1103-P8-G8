@@ -188,9 +188,12 @@ def analyse():
             except ValidationError:
                 # Invalid optional journey details must still allow event saving.
                 destination = ""
+        # Endpoint names can reveal the journey origin. Keep details transient.
+        travel_snapshot = dict(travel_result)
+        travel_snapshot["legs"] = None
         summary.update(
             venue_name=venue_name.strip(), venue_address=venue_address.strip(),
-            destination_postal_code=destination, travel_snapshot=travel_result,
+            destination_postal_code=destination, travel_snapshot=travel_snapshot,
         )
         record = EventRecord.from_dict(summary)
         existing = unpack_events(db.load_events(), EventRecord)

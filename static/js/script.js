@@ -617,6 +617,38 @@ function renderTravelContent(content, travel, historical = false) {
   add('Travel mode', 'Public transport (OneMap)');
   add('Distance', formatGeoNumber(travel.distance_km, 'km'));
   add('Duration', formatGeoNumber(travel.duration_minutes, 'min'));
+  if (!historical) {
+    const heading = document.createElement('h4');
+    heading.textContent = 'Journey steps';
+    content.append(heading);
+    if (Array.isArray(travel.legs) && travel.legs.length) {
+      const steps = document.createElement('ol');
+      steps.className = 'geo-journey-steps';
+      const modes = {WALK: 'Walk', BUS: 'Bus', SUBWAY: 'MRT', RAIL: 'Rail', TRAM: 'Tram', FERRY: 'Ferry'};
+      travel.legs.forEach(leg => {
+        if (!leg || typeof leg !== 'object') return;
+        const step = document.createElement('li');
+        const title = document.createElement('strong');
+        title.textContent = (modes[leg.mode] || 'Travel') + (leg.route ? ` · ${leg.route}` : '');
+        const places = document.createElement('p');
+        places.textContent = `${leg.from_name || 'Start unavailable'} → ${leg.to_name || 'End unavailable'}`;
+        const measurements = document.createElement('small');
+        measurements.textContent = `${formatGeoNumber(leg.duration_minutes, 'min')} · ${formatGeoNumber(leg.distance_km, 'km')}`;
+        step.append(title, places, measurements);
+        steps.append(step);
+      });
+      content.append(steps);
+      const privacy = document.createElement('p');
+      privacy.className = 'geo-hint';
+      privacy.textContent = 'Journey steps are shown for this analysis only and are not saved in History.';
+      content.append(privacy);
+    } else {
+      const message = document.createElement('p');
+      message.className = 'geo-hint';
+      message.textContent = 'Step-by-step journey details are unavailable for this estimate.';
+      content.append(message);
+    }
+  }
   if (travel.arrival_buffer_minutes !== null) {
     add('Arrival buffer', formatGeoNumber(travel.arrival_buffer_minutes, 'min'));
   }

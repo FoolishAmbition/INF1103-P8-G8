@@ -1,6 +1,7 @@
 """Departure estimates and journey-length assessments for EventWise."""
 
 import math
+from copy import deepcopy
 from datetime import datetime, timedelta
 
 from src.exceptions import ValidationError
@@ -21,6 +22,7 @@ class TravelAssessment:
         estimated_arrival=None,
         provider="OneMap",
         error_message=None,
+        legs=None,
     ):
         self.status = status
         self.feasibility = feasibility
@@ -31,6 +33,7 @@ class TravelAssessment:
         self.estimated_arrival = estimated_arrival
         self.provider = provider
         self.error_message = error_message
+        self.legs = deepcopy(legs)
 
     def __eq__(self, other):
         if type(other) is not type(self):
@@ -90,6 +93,7 @@ class TravelEvaluator:
             recommended_departure=recommended_departure,
             estimated_arrival=arrival,
             provider=route.provider,
+            legs=route.legs,
         )
 
     @staticmethod

@@ -32,7 +32,8 @@ def serialize_travel_result(
     Pass the evaluator's actual preferred limit when known. No route request is
     performed here. Error text comes from a fixed list, never exception messages.
     Supply event_start to assess lateness against the returned itinerary arrival.
-    Without it, warnings remain unknown. Legs and alternatives are not implemented.
+    Without it, warnings remain unknown. Leg geometry is excluded; alternatives
+    remain unimplemented. Current leg endpoint names must not be saved in history.
     """
     if assessment is not None and not isinstance(assessment, TravelAssessment):
         raise ValidationError("Assessment must be a TravelAssessment or None.")
@@ -95,6 +96,29 @@ def serialize_travel_result(
         estimated_arrival=arrival.isoformat(),
         feasibility=assessment.feasibility,
     )
+    if isinstance(assessment.legs, list):
+        result["legs"] = []
+        for leg in assessment.legs:
+            if not isinstance(leg, dict):
+                continue
+            mode = leg.get("mode")
+            if mode not in ("WALK", "BUS", "SUBWAY", "RAIL", "TRAM", "FERRY"):
+                mode = None
+            detail = {"mode": mode}
+            for key in ("distance_km", "duration_minutes"):
+                value = leg.get(key)
+                if not isinstance(value, (int, float)) or isinstance(value, bool):
+                    value = None
+                else:
+                    try:
+                        TravelEvaluator._validate_number(value, key, allow_zero=True)
+                    except ValidationError:
+                        value = None
+                detail[key] = value
+            for key in ("route", "from_name", "to_name"):
+                value = leg.get(key)
+                detail[key] = value.strip() if isinstance(value, str) and value.strip() else None
+            result["legs"].append(detail)
     if event_start is not None:
         try:
             target_arrival = event_start - timedelta(minutes=assessment.arrival_buffer_minutes)
