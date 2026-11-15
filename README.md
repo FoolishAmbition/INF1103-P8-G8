@@ -1,132 +1,116 @@
-# EventWise - AI-Assisted Student Event Decision System
+# EventWise 🎓
 
-## 1. Problem Statement and Target Users
-Students are often invited to career talks, workshops, networking sessions, club activities and other school events. With assignments, classes and other commitments, it can be difficult to decide whether an event is worth attending. Students may miss useful opportunities or spend time on events that are not very relevant to them.
+An AI-assisted decision-support system that helps students evaluate whether academic, career, and networking events are worth attending based on their studies, workload, and transit feasibility.
 
-EventWise is a student event decision-making assistant that helps users decide whether to attend an event based on event details and their current situation. The target users are university and polytechnic students who need a quick way to judge whether an event is worth their time based on their workload, field of study, interests and the event information provided.
+---
 
-## 2. User Inputs and Features
-When using the system for the first time, the student creates a profile containing:
+## What is EventWise?
 
-- Field of study
-- One or more interests
+As a tertiary student, you are constantly invited to career talks, technical workshops, hackathons, and networking sessions. Between coursework, exams, and personal commitments, deciding what to attend can be overwhelming.
 
-The profile is saved in `data/profile.json` and loaded automatically the next time the program runs. The profile can also be edited from the main menu.
+EventWise connects your student profile, schedule workload, and event details to give you:
+- **AI Fit Evaluation:** Analyzes event descriptions with Google Gemini to rate career relevance, learning value, and networking potential.
+- **Attendance Recommendation:** Uses deterministic rules to give a clear verdict (**ATTEND**, **MAYBE**, or **SKIP**) tailored to your current workload.
+- **Singapore Transit Feasibility:** Integrates with the Singapore OneMap API to calculate public transit routes, journey duration, and recommended departure times so you arrive with time to spare.
+- **Searchable History & Insights:** View, filter, and track all your past event decisions and attendance trends directly from your browser.
 
-For each event, the user provides:
+---
 
-- Event name
-- Event description
-- Current workload: Low, Medium or High
+## Setup & Configuration
 
-The application validates required fields before submission. Users can cancel profile or event input without saving the changes.
+### 1. Prerequisites
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (recommended for containerized deployment), **OR**
+- Python 3.11+ and MongoDB (for running locally).
 
-The main menu provides the following options:
+### 2. Environment Variables (`.env`)
+Create a `.env` file in the root directory:
 
-- Profile - create or edit the saved student profile
-- Analyse New Events - analyse an event using Gemini AI
-- View Analysed Events - view saved event summaries and details
-- Add Dummy Event - add a randomly generated event for demonstration/testing without an API call
-- Exit - save current data and close the application
+```env
+# Required: Google Gemini API key
+API_KEY=your_gemini_api_key_here
 
-## 3. Use of AI
-Each submitted event is sent to the Google Gemini API together with the student's saved profile. Gemini returns structured JSON containing:
+# Optional: Singapore OneMap Token (for public transit routing)
+ONEMAP_ACCESS_TOKEN=your_onemap_token_here
 
-- Event category
-- Career relevance score from 1 to 5
-- Learning value score from 1 to 5
-- Networking value score from 1 to 5
-- Short AI reasoning
-
-The response is checked to make sure all required fields are present and valid. The AI does not make the final attendance decision. The program's business rules use the AI scores together with the student's workload to return ATTEND, MAYBE or SKIP.
-
-If the API key is missing, the API request fails, the response is invalid, or a temporary API/network error occurs, the application displays an error. Temporary failures are retried up to three times.
-
-## 4. Business Rules
-The program calculates the event value as:
-
-Event Value = Career Relevance + Learning Value + Networking Value
-
-The minimum event value is 3 and the maximum is 15. Event priority is classified as:
-
-- High: 11-15
-- Medium: 7-10
-- Low: 3-6
-
-Recommendations are evaluated from top to bottom:
-
-| Condition | Recommendation |
-| --- | --- |
-| Career relevance >= 4 AND learning value >= 4 AND workload is Low or Medium | ATTEND |
-| Event value >= 11 AND workload is Low or Medium | ATTEND |
-| Event value >= 11 AND workload is High | MAYBE |
-| Event value >= 8 AND workload is Low or Medium | MAYBE |
-| Event value >= 8 AND workload is High | SKIP |
-| Event value <= 7 | SKIP |
-
-The final recommendation, priority, score breakdown, AI reasoning and a short explanation are displayed to the user. Analysed events are saved in `data/events.json` and can be viewed later.
-
-## 5. Running the Project
-
-Install the dependencies:
-
-```text
-pip install -r requirements.txt
+# Optional: MongoDB connection URI (defaults to mongodb://localhost:27017/)
+MONGODB_URI=mongodb://localhost:27017/
 ```
 
-Create a `.env` file in the project root and add a Google AI Studio API key:
+> **Tip:** If you have a Singapore OneMap account, you can automatically fetch and save your token into `.env` by running:
+> ```bash
+> python get_onemap_token.py
+> ```
 
-```text
-API_KEY=YOUR_API_KEY_HERE
-```
+---
 
-Start the application:
+## How to Run the Application
 
-```text
-python main.py
-```
+### Option A: Using Docker Compose (Recommended)
 
-The application stores profile and event history locally in the `data` directory. The files are created automatically when data is saved.
+Docker Compose automatically spins up both the MongoDB database and the EventWise web interface.
 
-## 6. Docker
+1. **Start the application:**
+   ```bash
+   docker compose up -d
+   ```
 
-Build and run the application with Docker:
+2. **Open the web dashboard:**
+   Navigate to:
+   ```
+   http://localhost:5000
+   ```
 
-```text
-docker build -t eventwise .
-docker run --rm -it --env-file .env -v "${PWD}/data:/app/data" eventwise
-```
+3. **Stop the application:**
+   ```bash
+   docker compose down
+   ```
+   *(Your saved data persists safely inside the `mongodb_data` volume).*
 
-## 7. Test Script
+---
 
-Run the automated logic tests (no live API connection is required):
+### Option B: Running Locally (Native Python)
 
-```text
+If you prefer running directly on your host machine:
+
+1. **Install Python dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. **Start MongoDB:**
+   Make sure MongoDB is running on `mongodb://localhost:27017/`. You can quickly launch one via Docker:
+   ```bash
+   docker run -d --name eventwise-mongo -p 27017:27017 -v mongodb_data:/data/db mongo:8.0
+   ```
+
+3. **Run the web server:**
+   ```bash
+   python main.py
+   ```
+
+4. **Open the dashboard:**
+   Open your browser at `http://localhost:5000`.
+
+---
+
+## Running the Automated Tests
+
+All automated test suites run completely offline with mocked data and require no live API credentials:
+
+```bash
+# Run unit and integration test suites
+python -m unittest test_models.py test_geolocation.py test_journey_planner.py test_travel_assessment.py test_travel_result.py test_web_profile.py test_web_travel.py
+
+# Run logic manager and business rule tests
 python test_logic_manager.py
 ```
 
-Docker run test script
+---
 
-```text
-docker run --rm -it --env-file .env -v "${PWD}/data:/app/data" eventwise python test_logic_manager.py
-```
+## Project Structure Overview
 
-## 8. Team Repository Details
-GitHub Repository URL: https://github.com/FoolishAmbition/INF1103-P8-G8
-
-Overall Flow:
-```text
-[ User ]
-    │
-    ▼
-[ io_manager.py ] ── Collect & validate profile, event, and workload input
-    │
-    ▼
-[ ai_manager.py ] ── Send profile and event to Gemini; receive structured JSON
-    │
-    ▼
-[ logic_manager.py ] ── Validate AI output, calculate value, priority, and recommendation
-    │
-    ▼
-[ data_manager.py ] ── Load and save profile and event history
-```
+- `main.py`: Flask web server entrypoint and application orchestrator.
+- `src/`: Core modules for AI analysis, scoring rules, data storage, and transit calculation.
+- `templates/` & `static/`: Web dashboard frontend (HTML layout, CSS styling, and reactive JavaScript).
+- `data/`: Local JSON fallback storage for running in environments without MongoDB.
+- `get_onemap_token.py`: Standalone CLI helper to authenticate with OneMap.
