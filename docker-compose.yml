@@ -1,20 +1,16 @@
 
 services:
-
-  gui:
+  eventwise:
     build: .
-    container_name: eventwise-gui
-    command: python main.py
-
+    image: eventwise:latest
+    container_name: eventwise-app
+    restart: unless-stopped
     env_file:
       - .env
-
     environment:
       MONGODB_URI: mongodb://mongodb:27017/
-
     ports:
       - "127.0.0.1:5000:5000"
-
     depends_on:
       mongodb:
         condition: service_healthy
@@ -30,21 +26,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      
-
-  eventwise:
-    build: .
-    container_name: eventwise-app
-    restart: unless-stopped
-    env_file:
-      - .env
-    depends_on:
-      mongodb:
-        condition: service_healthy
-    environment:
-      MONGODB_URI: mongodb://mongodb:27017/
-    stdin_open: true
-    tty: true
 
 volumes:
   mongodb_data:

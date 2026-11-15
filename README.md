@@ -47,7 +47,7 @@ MONGODB_URI=mongodb://localhost:27017/
 
 ### Option A: Using Docker Compose (Recommended)
 
-Docker Compose automatically spins up both the MongoDB database and the EventWise web interface.
+Docker Compose builds one EventWise image and starts the web application and MongoDB database.
 
 1. **Start the application:**
    ```bash
