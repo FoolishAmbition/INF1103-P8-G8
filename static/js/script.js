@@ -96,6 +96,10 @@ $('event-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const button = $('analyse-button');
   button.disabled = true;
+  $('result-data').hidden = true;
+  $('result-empty').hidden = false;
+  $('result-label').textContent = 'ANALYSING';
+  renderTravelEstimate(null);
   setMessage('form-message', 'Analysing your event...');
   try {
     const result = await api('/api/analyse', 'POST', {
@@ -111,7 +115,13 @@ $('event-form').addEventListener('submit', async (e) => {
     savedEvents = result.events || [...savedEvents, result.event];
     renderHistory();
     setMessage('form-message', '✓ Recommendation generated and saved!');
-  } catch (err) { setMessage('form-message', err.message, true); }
+  } catch (err) {
+    $('result-data').hidden = true;
+    $('result-empty').hidden = false;
+    $('result-label').textContent = 'ANALYSIS FAILED';
+    renderTravelEstimate(null);
+    setMessage('form-message', err.message, true);
+  }
   finally { button.disabled = false; }
 });
 
