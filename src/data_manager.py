@@ -45,23 +45,3 @@ class DataManager(BaseManager):
         return None
 
 
-# ----------------------------------------------------------------------
-# Module-level wrappers (backward compatible with main.py)
-# ----------------------------------------------------------------------
-_default_data = DataManager()
-
-
-def load_profile():
-    return _default_data.load_profile()
-
-
-def save_profile(profile):
-    return _default_data.save_profile(profile)
-
-
-def load_events():
-    return _default_data.load_events()
-
-
-def save_events(events):
-    return _default_data.save_events(events)

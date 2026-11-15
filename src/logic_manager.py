@@ -1,8 +1,6 @@
 """LogicManager: applies business rules to AI-enriched records.
 
 The class holds a RuleEngine and a ScoringStrategy (both injected).
-Module-level functions are kept as thin wrappers so existing callers
-(main.py and test_logic_manager.py) keep working during the refactor.
 """
 
 import random
@@ -120,43 +118,3 @@ class LogicManager(BaseManager):
         return None
 
 
-# ----------------------------------------------------------------------
-# Module-level wrappers (backward compatible with main.py + tests)
-# ----------------------------------------------------------------------
-_default_logic = LogicManager()
-
-
-def validate_ai_result(ai_result: dict) -> bool:
-    return _default_logic.validate_ai_result(ai_result)
-
-
-def calculate_event_value(ai_result: dict) -> int:
-    return _default_logic.calculate_event_value(ai_result)
-
-
-def event_priority(value: int) -> str:
-    return _default_logic.event_priority(value)
-
-
-def generate_recommendation(ai_result: dict, workload: str) -> str:
-    return _default_logic.generate_recommendation(ai_result, workload)
-
-
-def generate_reason(recommendation: str, workload: str) -> str:
-    return _default_logic.generate_reason(recommendation, workload)
-
-
-def generate_summary(ai_result: dict, workload: str):
-    return _default_logic.generate_summary(ai_result, workload)
-
-
-def format_scores(career: int, learning: int, networking: int) -> dict:
-    return {
-        "career_relevance": f"{career}/5",
-        "learning_value": f"{learning}/5",
-        "networking_value": f"{networking}/5",
-    }
-
-
-def add_dummy_event() -> dict:
-    return _default_logic.add_dummy_event()
