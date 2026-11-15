@@ -1,6 +1,7 @@
 """Offline web analysis tests with real planning/logic and mocked external services."""
 
 import unittest
+import json
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
@@ -59,8 +60,11 @@ class TestWebTravel(unittest.TestCase):
         saved = self.db.save_events.call_args.args[0]
         self.assertEqual(len(saved), 1)
         self.assertNotIn("travel", saved[0])
-        self.assertEqual(saved[0]["destination_postal_code"], "")
-        self.assertIsNone(saved[0]["travel_snapshot"])
+        self.assertEqual(saved[0], result["event"])
+        self.assertEqual(saved[0]["travel_snapshot"], result["travel"])
+        self.assertEqual(result["events"], saved)
+        self.assertNotIn("origin_postal_code", json.dumps(saved))
+        self.assertNotIn("home_postal_code", json.dumps(saved))
         self.db.save_profile.assert_not_called()
         self.storage.close.assert_called_once_with()
         return result["travel"]
@@ -74,8 +78,12 @@ class TestWebTravel(unittest.TestCase):
         self.db.save_events.assert_called_once()
 
     def test_explicit_skip_ignores_unused_travel_fields(self):
-        result = self.submit({"origin_choice": "skip", "event_start": "invalid"})
+        result = self.submit({
+            "origin_choice": "skip", "event_start": "invalid",
+            "destination_postal_code": "invalid",
+        })
         self.assertEqual(result["status"], "SKIPPED")
+        self.assertEqual(self.db.save_events.call_args.args[0][0]["destination_postal_code"], "")
         self.service_class.assert_not_called()
 
     def test_home_routes_twice_and_returns_arrival_warning(self):
@@ -87,6 +95,7 @@ class TestWebTravel(unittest.TestCase):
         self.assertEqual(result["estimated_arrival"], self.checked.estimated_arrival.isoformat())
         self.assertEqual(result["warning_codes"], ["BUFFER_MISSED"])
         self.assertEqual(result["preferred_travel_limit_minutes"], 60)
+        self.assertEqual(self.db.save_events.call_args.args[0][0]["destination_postal_code"], "023456")
         self.ai.analyze_event.assert_called_once_with(
             {"field_of_study": "Computing", "interests": ["Python"]},
             "Python workshop", "Learn Python",
@@ -123,6 +132,7 @@ class TestWebTravel(unittest.TestCase):
         result = self.submit(self.travel)
         self.assertEqual(result["status"], "UNAVAILABLE")
         self.assertEqual(result["error_code"], "INVALID_INPUT")
+        self.assertEqual(self.db.save_events.call_args.args[0][0]["destination_postal_code"], "")
         self.service.get_transit_route.assert_not_called()
 
     def test_malformed_travel_does_not_block_event(self):
@@ -137,6 +147,70 @@ class TestWebTravel(unittest.TestCase):
         self.assertIsNone(result["duration_minutes"])
         self.assertNotIn("secret", str(result))
         self.assertNotIn("012345", str(result))
+        saved = self.db.save_events.call_args.args[0][0]
+        self.assertEqual(saved["destination_postal_code"], "023456")
+        self.assertNotIn("secret", json.dumps(saved))
+
+    def test_venue_is_saved_when_travel_is_skipped(self):
+        self.payload.update(venue_name=" Hall ", venue_address=" 10 Example Road ")
+        self.submit({"origin_choice": "skip"})
+        saved = self.db.save_events.call_args.args[0][0]
+        self.assertEqual(saved["venue_name"], "Hall")
+        self.assertEqual(saved["venue_address"], "10 Example Road")
+        self.assertEqual(saved["travel_snapshot"]["status"], "SKIPPED")
+
+    def test_saved_venue_and_journey_are_reloaded_from_state(self):
+        self.payload.update(venue_name="Hall", venue_address="10 Example Road")
+        self.submit(self.travel)
+        saved = self.db.save_events.call_args.args[0]
+        self.db.load_events.return_value = json.loads(json.dumps(saved))
+        response = self.client.get("/api/state")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["events"], saved)
+        snapshot = response.get_json()["events"][0]["travel_snapshot"]
+        self.assertEqual(snapshot["recommended_departure"], self.departure.isoformat())
+        self.assertEqual(snapshot["estimated_arrival"], self.checked.estimated_arrival.isoformat())
+        self.assertEqual(self.service.get_transit_route.call_count, 2)
+
+    def test_legacy_history_survives_new_event_save(self):
+        self.db.load_events.return_value = [{
+            "event_name": "Old event", "event_description": "Description", "workload": "Low",
+        }]
+        response = self.client.post("/api/analyse", json=self.payload)
+        self.assertEqual(response.status_code, 200)
+        saved = self.db.save_events.call_args.args[0]
+        self.assertEqual(len(saved), 2)
+        self.assertEqual(saved[0]["event_name"], "Old event")
+        self.assertEqual(saved[0]["venue_name"], "")
+        self.assertIsNone(saved[0]["travel_snapshot"])
+        self.assertEqual(saved[1]["travel_snapshot"]["status"], "SKIPPED")
+
+    def test_invalid_venue_is_rejected_before_ai_or_storage(self):
+        for field in ("venue_name", "venue_address"):
+            for value in (None, 123, [], {}):
+                with self.subTest(field=field, value=value):
+                    payload = dict(self.payload)
+                    payload[field] = value
+                    response = self.client.post("/api/analyse", json=payload)
+                    self.assertEqual(response.status_code, 400)
+        self.ai.analyze_event.assert_not_called()
+        self.db.save_events.assert_not_called()
+        self.service_class.assert_not_called()
+
+    def test_client_snapshot_and_origin_metadata_are_ignored(self):
+        self.payload.update(
+            travel_snapshot={"status": "AVAILABLE", "access_token": "client-secret"},
+            origin_postal_code="034567", home_postal_code="034567",
+            destination_postal_code="999999",
+        )
+        self.travel.update(origin_choice="alternate", origin_postal_code="034567", access_token="client-secret")
+        result = self.submit(self.travel)
+        saved = self.db.save_events.call_args.args[0][0]
+        self.assertEqual(saved["travel_snapshot"], result)
+        self.assertEqual(saved["destination_postal_code"], "023456")
+        self.assertNotIn("client-secret", json.dumps(saved))
+        self.assertNotIn("034567", json.dumps(saved))
+        self.assertEqual(self.profile.home_postal_code, "012345")
 
     def test_past_start_preserves_event_without_provider_call(self):
         self.travel["event_start"] = "2000-01-01T09:00:00+08:00"

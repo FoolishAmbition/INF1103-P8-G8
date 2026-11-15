@@ -4,7 +4,7 @@ import time
 from datetime import datetime
 
 from src.exceptions import ValidationError
-from src.geolocation import GeoLocationService
+from src.geolocation import GeoLocationService, validate_singapore_postal_code
 from src.journey_planner import JourneyPlanner
 from src.travel_assessment import TravelAssessment, TravelEvaluator
 from src.travel_result import serialize_travel_result
@@ -146,11 +146,15 @@ def analyse():
     name = payload.get("event_name", "")
     description = payload.get("event_description", "")
     workload = payload.get("workload", "")
+    venue_name = payload.get("venue_name", "")
+    venue_address = payload.get("venue_address", "")
     if (not isinstance(name, str) or not isinstance(description, str)
             or not name.strip() or not description.strip()
             or len(name) > 150 or len(description) > 2000
             or workload not in ("Low", "Medium", "High")):
         return jsonify(error="Enter an event name, description, and valid workload."), 400
+    if not isinstance(venue_name, str) or not isinstance(venue_address, str):
+        return jsonify(error="Venue name and address must be text."), 400
 
     storage = None
     try:
@@ -175,11 +179,23 @@ def analyse():
 
         summary = dict(summary)
         summary.update(event_name=name.strip(), event_description=description.strip(), workload=workload)
+        travel = payload.get("travel", {})
+        travel_result = assess_web_travel(travel, profile)
+        destination = ""
+        if isinstance(travel, dict) and travel.get("origin_choice") in ("home", "alternate"):
+            try:
+                destination = validate_singapore_postal_code(travel.get("destination_postal_code"))
+            except ValidationError:
+                # Invalid optional journey details must still allow event saving.
+                destination = ""
+        summary.update(
+            venue_name=venue_name.strip(), venue_address=venue_address.strip(),
+            destination_postal_code=destination, travel_snapshot=travel_result,
+        )
         record = EventRecord.from_dict(summary)
         existing = unpack_events(db.load_events(), EventRecord)
         existing.append(record)
         db.save_events([e.to_dict() for e in existing])
-        travel_result = assess_web_travel(payload.get("travel", {}), profile)
         return jsonify(
             message="Analysis saved!", event=record.to_dict(),
             events=[e.to_dict() for e in existing], travel=travel_result,
