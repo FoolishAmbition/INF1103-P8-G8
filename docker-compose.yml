@@ -6,7 +6,8 @@ services:
     container_name: eventwise-app
     restart: unless-stopped
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       MONGODB_URI: mongodb://mongodb:27017/
     ports:

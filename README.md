@@ -23,7 +23,11 @@ EventWise connects your student profile, schedule workload, and event details to
 - Python 3.11+ and MongoDB (for running locally).
 
 ### 2. Environment Variables (`.env`)
-Create a `.env` file in the root directory:
+Copy the sample template or create a `.env` file in the root directory:
+
+```bash
+cp .env.example .env
+```
 
 ```env
 # Required: Google Gemini API key
@@ -97,13 +101,41 @@ If you prefer running directly on your host machine:
 
 All automated test suites run completely offline with mocked data and require no live API credentials:
 
+### Running Tests Locally
 ```bash
-# Run unit and integration test suites
-python -m unittest test_models.py test_geolocation.py test_journey_planner.py test_travel_assessment.py test_travel_result.py test_web_profile.py test_web_travel.py
+# Run the entire test suite (all tests discovered automatically)
+python -m unittest discover -s . -p "test_*.py"
 
-# Run logic manager and business rule tests
-python test_logic_manager.py
+# Or run specific test modules
+python -m unittest test_models.py
+python -m unittest test_rules_and_scoring.py
+python -m unittest test_features.py
+python -m unittest test_geolocation.py
+python -m unittest test_web_api.py
+python -m unittest test_audit_remediation.py
 ```
+
+### Running Tests Inside Docker
+Tests can be executed directly inside the container without installing dependencies locally:
+
+```bash
+# If using Docker Compose (while containers are running):
+docker compose exec eventwise python -m unittest discover -s . -p "test_*.py"
+
+# Or using a standalone container:
+docker run --rm eventwise:latest python -m unittest discover -s . -p "test_*.py"
+```
+
+---
+
+## Continuous Integration (CI)
+
+A continuous integration workflow is configured with **GitHub Actions** in [`.github/workflows/ci.yml`](.github/workflows/ci.yml). 
+On every `push` and `pull_request` targeting `main` or `mergeGUIGeoLocation`, the workflow automatically:
+1. Provisions a clean Ubuntu environment running Python 3.11.
+2. Installs required dependencies from `requirements.txt`.
+3. Executes the full offline automated test suite.
+4. Builds the Docker container and verifies tests pass inside Docker.
 
 ---
 
