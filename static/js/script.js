@@ -6,16 +6,16 @@ function setMessage(id, text, isError = false) {
   $(id).classList.toggle('error', isError);
 }
 function num(value) {
+  if (value === null || value === undefined) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
 function normaliseEvent(raw) {
-  const ai = raw.ai_scores || raw.AI_Scores || {};
-  const career = num(raw.career_relevance ?? ai.career_relevance);
-  const learning = num(raw.learning_value ?? ai.learning_value);
-  const networking = num(raw.networking_value ?? ai.networking_value);
-  const scores = [career, learning, networking];
-  const score = num(raw.event_value ?? raw.total_value ?? ai.total_value) ?? (scores.every(v => v !== null) ? scores.reduce((a, b) => a + b, 0) : null);
+  const scores = raw.ai_scores;
+  const career = num(scores?.career_relevance);
+  const learning = num(scores?.learning_value);
+  const networking = num(scores?.networking_value);
+  const score = num(raw.event_value);
   return {
     name: raw.event_name || 'Untitled event',
     description: raw.event_description || '',
@@ -232,9 +232,8 @@ loadState();
     scoreLine.append(badge, total);
     container.append(scoreLine);
 
-    const rawAi = raw.ai_scores || raw.AI_Scores || {};
     addText(container, 'Description', e.description);
-    addText(container, 'Category', raw.event_category ?? raw.category ?? rawAi.event_category);
+    addText(container, 'Category', raw.event_category ?? raw.category);
     addText(container, 'Workload', raw.workload);
     addText(container, 'Priority', raw.priority ?? raw.event_priority);
     addText(container, 'Career relevance', e.career === null ? 'Not available' : `${e.career}/5`);
