@@ -3,6 +3,7 @@
 from datetime import timedelta
 
 from src.exceptions import ValidationError
+from src.route_geometry import decode_route_geometry
 from src.travel_assessment import TravelAssessment, TravelEvaluator
 
 
@@ -32,8 +33,8 @@ def serialize_travel_result(
     Pass the evaluator's actual preferred limit when known. No route request is
     performed here. Error text comes from a fixed list, never exception messages.
     Supply event_start to assess lateness against the returned itinerary arrival.
-    Without it, warnings remain unknown. Leg geometry is excluded; alternatives
-    remain unimplemented. Current leg endpoint names must not be saved in history.
+    Without it, warnings remain unknown. Decoded leg geometry and endpoint names
+    are transient and must not be saved in history. Alternatives remain pending.
     """
     if assessment is not None and not isinstance(assessment, TravelAssessment):
         raise ValidationError("Assessment must be a TravelAssessment or None.")
@@ -118,6 +119,7 @@ def serialize_travel_result(
             for key in ("route", "from_name", "to_name"):
                 value = leg.get(key)
                 detail[key] = value.strip() if isinstance(value, str) and value.strip() else None
+            detail["geometry"] = decode_route_geometry(leg.get("geometry_points"))
             result["legs"].append(detail)
     if event_start is not None:
         try:

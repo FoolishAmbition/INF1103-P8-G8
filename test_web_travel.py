@@ -113,6 +113,21 @@ class TestWebTravel(unittest.TestCase):
         self.assertEqual(self.db.save_events.call_args.args[0][0]["destination_postal_code"], "")
         self.service_class.assert_not_called()
 
+    def test_geometry_is_returned_from_rechecked_route_but_never_saved(self):
+        self.first.legs = [{"mode": "BUS", "geometry_points": 'INVALID_INITIAL_GEOMETRY'}]
+        self.checked.legs = [{"mode": "SUBWAY", "geometry_points": '_||F_mpxRgEoKgEfE'}]
+        self.payload['travel'] = self.travel
+        result = self.client.post('/api/analyse', json=self.payload).get_json()
+        self.assertEqual(result['travel']['legs'][0]['geometry'], [[1.3, 103.8], [1.301, 103.802], [1.302, 103.801]])
+        saved = self.db.save_events.call_args.args[0]
+        self.assertIsNone(saved[0]['travel_snapshot']['legs'])
+        self.assertNotIn('geometry', json.dumps(saved))
+        self.assertNotIn('103.8', json.dumps(saved))
+        self.db.load_events.return_value = saved
+        state = self.client.get('/api/state').get_json()
+        self.assertNotIn('geometry', json.dumps(state))
+        self.assertEqual(self.service.get_transit_route.call_count, 2)
+
     def test_home_routes_twice_and_returns_arrival_warning(self):
         result = self.submit(self.travel)
         requests = self.service.get_transit_route.call_args_list

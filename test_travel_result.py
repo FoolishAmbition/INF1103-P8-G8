@@ -49,7 +49,7 @@ class TestTravelResult(unittest.TestCase):
         self.route.legs[0]["route"] = "changed"
         result = serialize_travel_result(assessment)
         self.assertEqual(result["legs"], [{"mode": "BUS", "duration_minutes": 0,
-                         "distance_km": 0, "route": "42", "from_name": "Stop A", "to_name": "Stop B"}])
+                         "distance_km": 0, "route": "42", "from_name": "Stop A", "to_name": "Stop B", "geometry": None}])
         self.assertNotIn("PRIVATE_", json.dumps(result))
         result["legs"][0]["route"] = "client edit"
         self.assertEqual(assessment.legs[0]["route"], " 42 ")
@@ -61,8 +61,15 @@ class TestTravelResult(unittest.TestCase):
             with self.subTest(value=value):
                 result = serialize_travel_result(self.assessment)
                 self.assertEqual(result["legs"], [{"mode": None, "duration_minutes": None,
-                    "distance_km": None, "route": None, "from_name": None, "to_name": None}])
+                    "distance_km": None, "route": None, "from_name": None, "to_name": None, "geometry": None}])
                 json.dumps(result, allow_nan=False)
+
+    def test_valid_geometry_is_decoded_only_for_available_current_result(self):
+        self.assessment.legs = [{"mode": "WALK", "geometry_points": '_||F_mpxRgEoKgEfE'}]
+        result = serialize_travel_result(self.assessment)
+        self.assertEqual(result['legs'][0]['geometry'], [[1.3, 103.8], [1.301, 103.802], [1.302, 103.801]])
+        self.assertNotIn('geometry_points', result['legs'][0])
+        self.assertIsNone(serialize_travel_result()['legs'])
 
     def test_skip_and_unavailable_have_null_journey_fields_and_same_keys(self):
         skipped = serialize_travel_result()

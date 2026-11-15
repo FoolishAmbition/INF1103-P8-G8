@@ -98,8 +98,39 @@
 .geo-history-venue {overflow-wrap:anywhere;}
 @media(max-width:520px){.geo-time-cards{grid-template-columns:1fr}}
 @media(max-width:520px){.geo-result-line{flex-direction:column;gap:3px}.geo-result-line strong{text-align:left}}
-/* Ordered transit legs in the current journey estimate. */
-.geo-journey-steps { padding-left: 1.5rem; margin: .75rem 0; }
-.geo-journey-steps li { padding: .5rem .25rem; overflow-wrap: anywhere; }
-.geo-journey-steps p { margin: .3rem 0; }
-.geo-journey-steps small { display: block; }
+/* Linked current journey directions and map. */
+.geo-travel-result {padding:24px;background:#fff;}
+.geo-travel-result h3 {font-size:24px;}
+.geo-summary {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+.geo-summary>div {background:#f1f8ed;border:1px solid #c6d8c4;border-radius:12px;padding:16px;min-width:0;}
+.geo-summary span {display:block;color:#526358;font-size:12px;margin-bottom:7px;}
+.geo-summary strong {font-size:19px;line-height:1.4;overflow-wrap:anywhere;}
+.geo-alert {padding:10px 14px;background:#fff5df;border-left:4px solid #a66b00;border-radius:6px;margin:10px 0;}
+.geo-route-overview {display:flex;flex-wrap:wrap;gap:8px;margin:16px 0;}
+.geo-route-chip {border:1px solid #b9c5be;background:#fff;border-radius:20px;padding:7px 12px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;}
+.geo-preferences {margin:0 0 18px;font-size:12px;color:#526358;}
+.geo-preferences summary {cursor:pointer;padding:8px 0;}
+.geo-journey-layout {display:grid;grid-template-columns:minmax(280px,.85fr) minmax(0,1.25fr);gap:24px;align-items:start;}
+.geo-journey-layout h4 {margin:0;font-size:17px;}
+.geo-step-list {position:relative;list-style:none;padding:0;margin:12px 0;max-height:530px;overflow-y:auto;overscroll-behavior:contain;}
+.geo-step-list li {padding:0;margin:0 0 9px;}
+.geo-step-button {display:flex;gap:12px;width:100%;text-align:left;padding:13px;border:1px solid #ccd5d0;border-radius:11px;background:#fff;font:inherit;cursor:pointer;color:#26372a;}
+.geo-step-button:hover,.geo-route-chip:hover {background:#f1f6f9;}
+.geo-step-button.is-selected,.geo-route-chip.is-selected {background:#eaf3ff;border-color:#1858b0;box-shadow:inset 0 0 0 1px #1858b0;}
+.geo-step-button:focus-visible,.geo-route-chip:focus-visible,#geo-show-all:focus-visible {outline:3px solid #1858b0;outline-offset:3px;}
+.geo-step-number {display:flex;align-items:center;justify-content:center;flex:0 0 28px;height:28px;border-radius:50%;background:#4c5967;color:#fff;font-size:13px;font-weight:800;}
+.geo-mode-bus .geo-step-number {background:#b45100;}
+.geo-mode-subway .geo-step-number,.geo-mode-rail .geo-step-number {background:#1858b0;}
+.geo-step-detail {display:flex;flex-direction:column;gap:5px;min-width:0;overflow-wrap:anywhere;}
+.geo-step-detail strong {font-size:14px;line-height:1.4;}
+.geo-step-detail>span {font-size:12px;line-height:1.5;color:#526358;}
+.geo-step-detail small {font-size:12px;color:#526358;}
+#geo-map-section {position:sticky;top:18px;min-width:0;}
+.geo-map-heading {display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+#geo-show-all {background:#fff;border:1px solid #8b9c91;border-radius:8px;padding:8px 10px;font:inherit;font-size:12px;cursor:pointer;}
+.geo-route-map {height:470px;width:100%;border-radius:12px;border:1px solid #a3b2a8;z-index:0;}
+.geo-map-legend {font-size:12px;line-height:1.6;color:#526358;}
+.geo-map-number span,.geo-map-finish span {display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:#fff;color:#153e6b;border:2px solid #153e6b;border-radius:50%;font:800 13px 'DM Sans',sans-serif;box-shadow:0 1px 5px #0005;}
+.geo-map-finish span {background:#ad3232;color:#fff;border-color:#fff;border-radius:8px;font-size:11px;}
+@media(max-width:900px){.geo-journey-layout{grid-template-columns:1fr;}#geo-map-section{position:static;grid-row:1;}.geo-route-map{height:360px;}.geo-step-list{max-height:none;overflow:visible;}}
+@media(max-width:520px){.geo-travel-result{padding:16px;}.geo-summary{grid-template-columns:1fr 1fr;}.geo-summary>div:last-child{grid-column:1/-1;}.geo-summary>div{padding:12px;}.geo-summary strong{font-size:16px;}.geo-route-map{height:320px;}}

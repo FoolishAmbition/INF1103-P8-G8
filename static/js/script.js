@@ -559,7 +559,9 @@ function renderTravelEstimate(travel) {
   const section = $('geo-travel-result');
   const content = $('geo-travel-content');
   section.hidden = !travel || travel.status === 'SKIPPED';
+  $('geo-steps-content').replaceChildren();
   renderTravelContent(content, travel);
+  if (typeof EventWiseMap !== 'undefined') EventWiseMap.render(travel, selectJourneyStep);
 }
 
 function renderTravelContent(content, travel, historical = false) {
@@ -592,6 +594,10 @@ function renderTravelContent(content, travel, historical = false) {
     content.append(message);
     return;
   }
+  if (!historical) {
+    renderCurrentJourney(content, travel);
+    return;
+  }
   const timeCards = document.createElement('div');
   timeCards.className = 'geo-time-cards';
   for (const [labelText, value] of [
@@ -617,38 +623,6 @@ function renderTravelContent(content, travel, historical = false) {
   add('Travel mode', 'Public transport (OneMap)');
   add('Distance', formatGeoNumber(travel.distance_km, 'km'));
   add('Duration', formatGeoNumber(travel.duration_minutes, 'min'));
-  if (!historical) {
-    const heading = document.createElement('h4');
-    heading.textContent = 'Journey steps';
-    content.append(heading);
-    if (Array.isArray(travel.legs) && travel.legs.length) {
-      const steps = document.createElement('ol');
-      steps.className = 'geo-journey-steps';
-      const modes = {WALK: 'Walk', BUS: 'Bus', SUBWAY: 'MRT', RAIL: 'Rail', TRAM: 'Tram', FERRY: 'Ferry'};
-      travel.legs.forEach(leg => {
-        if (!leg || typeof leg !== 'object') return;
-        const step = document.createElement('li');
-        const title = document.createElement('strong');
-        title.textContent = (modes[leg.mode] || 'Travel') + (leg.route ? ` · ${leg.route}` : '');
-        const places = document.createElement('p');
-        places.textContent = `${leg.from_name || 'Start unavailable'} → ${leg.to_name || 'End unavailable'}`;
-        const measurements = document.createElement('small');
-        measurements.textContent = `${formatGeoNumber(leg.duration_minutes, 'min')} · ${formatGeoNumber(leg.distance_km, 'km')}`;
-        step.append(title, places, measurements);
-        steps.append(step);
-      });
-      content.append(steps);
-      const privacy = document.createElement('p');
-      privacy.className = 'geo-hint';
-      privacy.textContent = 'Journey steps are shown for this analysis only and are not saved in History.';
-      content.append(privacy);
-    } else {
-      const message = document.createElement('p');
-      message.className = 'geo-hint';
-      message.textContent = 'Step-by-step journey details are unavailable for this estimate.';
-      content.append(message);
-    }
-  }
   if (travel.arrival_buffer_minutes !== null) {
     add('Arrival buffer', formatGeoNumber(travel.arrival_buffer_minutes, 'min'));
   }
@@ -670,4 +644,109 @@ function renderTravelContent(content, travel, historical = false) {
       : 'Estimated arrival may miss the recommended early-arrival buffer.';
     content.append(warning);
   }
+}
+
+
+function journeyModeLabel(leg) {
+  const labels = {WALK: 'Walk', BUS: 'Bus', SUBWAY: 'MRT', RAIL: 'Rail', TRAM: 'Tram', FERRY: 'Ferry'};
+  return (labels[leg.mode] || 'Travel') + (leg.route && leg.mode !== 'WALK' ? ` ${leg.route}` : '');
+}
+function journeyMinutes(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return 'Time unavailable';
+  if (value > 0 && value < 1) return 'Under 1 min';
+  const minutes = Math.round(value);
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60);
+    const remainder = minutes % 60;
+    return `About ${hours} hr${remainder ? ` ${remainder} min` : ''}`;
+  }
+  return `About ${minutes} min`;
+}
+function selectJourneyStep(index) {
+  document.querySelectorAll('[data-journey-step]').forEach(button => {
+    const selected = Number(button.dataset.journeyStep) === index;
+    button.classList.toggle('is-selected', selected);
+    button.setAttribute('aria-pressed', String(selected));
+    if (selected && button.classList.contains('geo-step-button')) {
+      const list = button.closest('ol');
+      if (list && list.scrollHeight > list.clientHeight) {
+        list.scrollTo({top: Math.max(0, button.offsetTop - 8), behavior: 'smooth'});
+      }
+    }
+  });
+}
+function renderCurrentJourney(content, travel) {
+  const summary = document.createElement('div');
+  summary.className = 'geo-summary';
+  for (const [label, value] of [
+    ['Leave by', formatGeoDate(travel.recommended_departure)],
+    ['Estimated arrival', formatGeoDate(travel.estimated_arrival)],
+    ['Total journey', journeyMinutes(travel.duration_minutes)]
+  ]) {
+    const card = document.createElement('div');
+    const title = document.createElement('span'); title.textContent = label;
+    const strong = document.createElement('strong'); strong.textContent = value;
+    card.append(title, strong); summary.append(card);
+  }
+  content.append(summary);
+  const warnings = Array.isArray(travel.warning_codes) ? travel.warning_codes : [];
+  if (warnings.includes('EVENT_START_MISSED') || warnings.includes('BUFFER_MISSED')) {
+    const alert = document.createElement('p'); alert.className = 'geo-warning geo-alert';
+    alert.textContent = warnings.includes('EVENT_START_MISSED')
+      ? 'Arrival is estimated after the event starts.' : 'You may miss the early-arrival buffer.';
+    content.append(alert);
+  }
+  if (travel.feasibility === 'LONG_JOURNEY') {
+    const alert = document.createElement('p'); alert.className = 'geo-warning geo-alert';
+    alert.textContent = 'Long journey: above your preferred travel limit.';
+    content.append(alert);
+  }
+  const legs = Array.isArray(travel.legs) ? travel.legs : [];
+  const overview = document.createElement('div'); overview.className = 'geo-route-overview';
+  overview.setAttribute('aria-label', 'Journey at a glance');
+  const steps = document.createElement('ol'); steps.className = 'geo-step-list';
+  legs.forEach((leg, index) => {
+    if (!leg || typeof leg !== 'object') return;
+    const modeClass = ['WALK', 'BUS', 'SUBWAY', 'RAIL', 'TRAM', 'FERRY'].includes(leg.mode) ? leg.mode.toLowerCase() : 'other';
+    const choose = () => {
+      selectJourneyStep(index);
+      if (typeof EventWiseMap !== 'undefined') EventWiseMap.selectStep(index);
+    };
+    const chip = document.createElement('button'); chip.type = 'button';
+    chip.className = 'geo-route-chip geo-mode-' + modeClass;
+    chip.dataset.journeyStep = String(index); chip.setAttribute('aria-pressed', 'false');
+    chip.textContent = `${index + 1}. ${journeyModeLabel(leg)}`;
+    chip.addEventListener('click', choose); overview.append(chip);
+    const item = document.createElement('li');
+    const button = document.createElement('button'); button.type = 'button';
+    button.className = 'geo-step-button geo-mode-' + modeClass;
+    button.dataset.journeyStep = String(index); button.setAttribute('aria-pressed', 'false');
+    button.addEventListener('click', choose);
+    const number = document.createElement('span'); number.className = 'geo-step-number'; number.textContent = String(index + 1);
+    const detail = document.createElement('span'); detail.className = 'geo-step-detail';
+    const title = document.createElement('strong');
+    title.textContent = leg.mode === 'WALK' ? `Walk to ${leg.to_name || 'the next stop'}` : `Take ${journeyModeLabel(leg)}`;
+    const places = document.createElement('span');
+    places.textContent = `${leg.from_name || 'Start unavailable'} → ${leg.to_name || 'End unavailable'}`;
+    const measurements = document.createElement('small');
+    measurements.textContent = `${journeyMinutes(leg.duration_minutes)} · ${formatGeoNumber(leg.distance_km, 'km')}`;
+    detail.append(title, places, measurements); button.append(number, detail); item.append(button); steps.append(item);
+  });
+  content.append(overview);
+  const preferences = document.createElement('details'); preferences.className = 'geo-preferences';
+  const toggle = document.createElement('summary'); toggle.textContent = 'Estimate details';
+  const text = document.createElement('p'); text.className = 'geo-hint';
+  text.textContent = `Singapore time (UTC+08:00) · Distance: ${formatGeoNumber(travel.distance_km, 'km')} · Arrival buffer: ${formatGeoNumber(travel.arrival_buffer_minutes, 'min')} · Preferred limit: ${formatGeoNumber(travel.preferred_travel_limit_minutes, 'min')}. Times are estimates.`;
+  preferences.append(toggle, text); content.append(preferences);
+  const holder = $('geo-steps-content');
+  const heading = document.createElement('h4'); heading.textContent = 'Step-by-step directions'; holder.append(heading);
+  const help = document.createElement('p'); help.className = 'geo-hint';
+  help.textContent = 'Select a step to highlight it on the map. Select a numbered map marker to match it here.'; holder.append(help);
+  if (steps.children.length) holder.append(steps);
+  else {
+    const empty = document.createElement('p'); empty.className = 'geo-hint';
+    empty.textContent = 'Step-by-step details are unavailable for this estimate.'; holder.append(empty);
+  }
+  const privacy = document.createElement('p'); privacy.className = 'geo-hint';
+  privacy.textContent = 'Steps and the map are shown for this analysis only. History saves the summary.'; holder.append(privacy);
 }
