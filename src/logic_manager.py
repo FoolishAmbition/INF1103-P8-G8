@@ -91,30 +91,3 @@ class LogicManager(BaseManager):
             "reason": self.generate_reason(recommendation, workload),
         }
         return summary, None
-
-    def add_dummy_event(self) -> dict:
-        categories = [
-            "Technical Workshop",
-            "Career Talk",
-            "Networking Session",
-            "Club Activity",
-            "Hackathon",
-        ]
-        workloads = ["Low", "Medium", "High"]
-        return {
-            "event_category": random.choice(categories),
-            "career_relevance": random.randint(1, 5),
-            "learning_value": random.randint(1, 5),
-            "networking_value": random.randint(1, 5),
-            "ai_reasoning": "Dummy event generated for demonstration/testing.",
-            "event_name": "Dummy Event",
-            "event_description": "Randomly generated event (no API call).",
-            "workload": random.choice(workloads),
-        }
-
-    # -- BaseManager contract ------------------------------------------
-    def run(self) -> None:
-        # LogicManager has no interactive loop; presence satisfies the ABC.
-        return None
-
-
