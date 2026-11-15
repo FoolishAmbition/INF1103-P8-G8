@@ -5,6 +5,7 @@ Keeps module-level analyze_event() wrapper for backward compatibility.
 
 import json
 import logging
+import re
 
 from src.ai_client import GeminiClient, PromptBuilder
 from src.base_manager import BaseManager
@@ -51,8 +52,17 @@ class AIManager(BaseManager):
         return True
 
     def parse_response(self, raw: str) -> dict:
+        json_text = raw
+        if isinstance(raw, str):
+            # Accept one complete Markdown JSON block around the whole response.
+            fenced_json = re.fullmatch(
+                r"```(?:json)?[ \t]*\r?\n(.*?)\r?\n```",
+                raw.strip(), flags=re.DOTALL | re.IGNORECASE,
+            )
+            if fenced_json is not None:
+                json_text = fenced_json.group(1)
         try:
-            data = json.loads(raw)
+            data = json.loads(json_text)
         except (json.JSONDecodeError, TypeError, UnicodeDecodeError) as exc:
             response_length = None
             empty = None

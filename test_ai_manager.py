@@ -39,12 +39,59 @@ class TestAIResponseDiagnostics(unittest.TestCase):
                 self.assertIn(f"position={len(raw)}", diagnostic)
 
     def test_fenced_json_is_identified_without_logging_content(self):
-        raw = " \n```json\n" + json.dumps(self.valid) + "\n```"
+        raw = " \n```json\nPRIVATE_MALFORMED_RESPONSE\n```"
         diagnostic = self.capture_invalid(raw)
         self.assertIn("empty=False fenced=True", diagnostic)
-        self.assertIn("line=2 column=1 position=2", diagnostic)
-        self.assertNotIn("Relevant workshop", diagnostic)
-        self.assertNotIn("career_relevance", diagnostic)
+        self.assertIn("line=1 column=1 position=0", diagnostic)
+        self.assertIn(f"length={len(raw)}", diagnostic)
+        self.assertNotIn("PRIVATE_MALFORMED_RESPONSE", diagnostic)
+
+    def test_complete_json_fences_accept_language_whitespace_and_line_endings(self):
+        text = json.dumps(self.valid)
+        for raw in (
+            "```json\n" + text + "\n```",
+            "```\n" + text + "\n```",
+            " \n```JSON  \r\n" + text + "\r\n```\t\n",
+        ):
+            with self.subTest(raw=raw), self.assertNoLogs("src.ai_manager"):
+                self.assertEqual(self.manager.parse_response(raw), self.valid)
+
+    def test_incomplete_extra_or_non_json_wrappers_are_rejected(self):
+        text = json.dumps(self.valid)
+        block = "```json\n" + text + "\n```"
+        for raw in (
+            "```json\n" + text,
+            block + "\nAdditional prose",
+            "Introductory prose\n" + block,
+            block + "\n" + block,
+            "```python\n" + text + "\n```",
+            "```json\n" + block + "\n```",
+        ):
+            with self.subTest(raw=raw):
+                self.capture_invalid(raw)
+
+    def test_fenced_payload_must_still_pass_schema_validation(self):
+        invalid_payloads = [
+            {}, [], {**self.valid, "career_relevance": 6},
+            {**self.valid, "learning_value": True},
+            {**self.valid, "ai_reasoning": ""},
+        ]
+        for data in invalid_payloads:
+            with self.subTest(data=data), self.assertNoLogs("src.ai_manager"):
+                with self.assertRaisesRegex(ResponseValidationError, "schema validation"):
+                    self.manager.parse_response("```json\n" + json.dumps(data) + "\n```")
+
+    def test_plain_json_preserves_backticks_inside_string_values(self):
+        data = {**self.valid, "ai_reasoning": "Learn to use ``` code fences."}
+        self.assertEqual(self.manager.parse_response(json.dumps(data)), data)
+
+    def test_fenced_response_succeeds_on_first_analysis_call(self):
+        self.client.call.return_value = "```json\n" + json.dumps(self.valid) + "\n```"
+        with self.assertNoLogs("src.ai_manager"):
+            result, error = self.manager.analyze_event({}, "Workshop", "Description")
+        self.assertEqual(result, self.valid)
+        self.assertIsNone(error)
+        self.client.call.assert_called_once()
 
     def test_prose_records_only_shape_without_response_text(self):
         diagnostic = self.capture_invalid("Private response text before JSON")
