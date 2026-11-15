@@ -1,5 +1,6 @@
 const $ = (id) => document.getElementById(id);
 let savedEvents = [];
+let savedHomePostalCode = '';
 
 function setMessage(id, text, isError = false) {
   $(id).textContent = text;
@@ -129,11 +130,14 @@ $('profile-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   setMessage('profile-message', 'Saving profile...');
   try {
-    await api('/api/profile', 'POST', {
+    const result = await api('/api/profile', 'POST', {
       field_of_study: $('study-field').value.trim(),
       interests: $('interests').value.split(',').map(s => s.trim()).filter(Boolean),
       home_postal_code: $('home-postal-code').value.trim()
     });
+    savedHomePostalCode = result.profile.home_postal_code || '';
+    $('home-postal-code').value = savedHomePostalCode;
+    updateGeoVisibility();
     setMessage('profile-message', '✓ Profile saved!');
   } catch (err) { setMessage('profile-message', err.message, true); }
 });
@@ -144,7 +148,8 @@ async function loadState() {
     const profile = state.profile || {};
     $('study-field').value = profile.field_of_study || '';
     $('interests').value = Array.isArray(profile.interests) ? profile.interests.join(', ') : '';
-    $('home-postal-code').value = profile.home_postal_code || '';
+    savedHomePostalCode = profile.home_postal_code || '';
+    $('home-postal-code').value = savedHomePostalCode;
     updateGeoVisibility();
     savedEvents = state.events || [];
     renderHistory();
@@ -488,24 +493,26 @@ loadState();
 
 /* new geolocation fields */
 function updateGeoVisibility() {
-  const choice = $('geo-origin-choice').value;
+  const originChoice = $('geo-origin-choice');
+  const hasSavedHome = /^[0-9]{6}$/.test(savedHomePostalCode);
+  originChoice.querySelector('option[value="home"]').disabled = !hasSavedHome;
+  if (originChoice.value === 'home' && !hasSavedHome) {
+    originChoice.value = 'skip';
+  }
+  const choice = originChoice.value;
   const enabled = choice !== 'skip';
   $('geo-fields').hidden = !enabled;
   $('geo-alternate-field').hidden = choice !== 'alternate';
-  const home = $('home-postal-code').value.trim();
   const hint = $('geo-home-message');
   hint.hidden = choice !== 'home';
   if (choice === 'home') {
-    hint.textContent = /^[0-9]{6}$/.test(home)
-      ? `Using your saved home postal code: ${home}`
-      : 'Set a 6-digit home postal code in My Profile and save it first.';
+    hint.textContent = `Using your saved home postal code: ${savedHomePostalCode}`;
   }
   $('geo-origin-postal').required = choice === 'alternate';
   $('geo-destination-postal').required = enabled;
   $('geo-event-start').required = enabled;
 }
 $('geo-origin-choice').addEventListener('change', updateGeoVisibility);
-$('home-postal-code').addEventListener('input', updateGeoVisibility);
 updateGeoVisibility();
 
 function collectTravelInputs() {
@@ -514,7 +521,7 @@ function collectTravelInputs() {
   const postal = $('geo-destination-postal').value.trim();
   const start = $('geo-event-start').value;
   const origin = $('geo-origin-postal').value.trim();
-  if (choice === 'home' && !/^[0-9]{6}$/.test($('home-postal-code').value.trim())) {
+  if (choice === 'home' && !/^[0-9]{6}$/.test(savedHomePostalCode)) {
     throw new Error('Save a 6-digit home postal code in My Profile, or choose another starting point.');
   }
   if (choice === 'alternate' && !/^[0-9]{6}$/.test(origin)) {
