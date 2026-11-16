@@ -1,0 +1,257 @@
+classDiagram
+direction TB
+
+class EventWise {
+    #Flask _app
+    #IOManager _io_manager
+    #AIManager _ai_manager
+    #LogicManager _logic_manager
+    #DataManager _data_manager
+    +analyse()
+    +save_profile()
+    +get_events()
+    +get_analytics()
+    +run()
+}
+class Flask {
+    <<framework>>
+}
+class BaseManager {
+    <<ABC>>
+    #str _name
+    +name() str
+}
+class IOManager {
+    +get_profile_input()
+    +get_event_input()
+    +get_filter_params()
+    +send_analysis()
+    +send_state()
+    +send_error()
+    +sanitize_travel_result()
+}
+class AIManager {
+    #int _max_retries
+    +build_prompt() str
+    +validate_schema() bool
+    +parse_response() dict
+    +analyze_event()
+}
+class LogicManager {
+    +profile_is_ready() bool
+    +calculate_event_value() int
+    +generate_recommendation() str
+    +create_event_record() EventRecord
+    +assess_travel() TravelAssessment
+}
+class DataManager {
+    +get_profile() StudentProfile
+    +update_profile() StudentProfile
+    +get_events() List~EventRecord~
+    +add_event() List~EventRecord~
+    +filter_events() List~EventRecord~
+    +get_analytics_summary() dict
+    +set_storage()
+    +close()
+}
+EventWise "1" *-- "1" Flask : creates and owns
+EventWise "1" o-- "1" IOManager
+EventWise "1" o-- "1" AIManager
+EventWise "1" o-- "1" LogicManager
+EventWise "1" o-- "1" DataManager
+BaseManager <|-- IOManager
+BaseManager <|-- AIManager
+BaseManager <|-- LogicManager
+BaseManager <|-- DataManager
+
+class Entity {
+    <<abstract>>
+    +to_dict()* dict
+    +clean_text() str
+    +check_score() int
+}
+class StudentProfile {
+    #str _field_of_study
+    #list _interests
+    #str _home_postal_code
+    +add_interest()
+    +remove_interest()
+    +is_empty() bool
+    +to_dict() dict
+    +from_dict() StudentProfile
+}
+class EventRecord {
+    #str _event_name
+    #str _event_description
+    #str _workload
+    #str _event_category
+    #str _ai_reasoning
+    #int _event_value
+    #str _priority
+    #str _recommendation
+    #str _reason
+    #str _timestamp
+    +to_dict() dict
+    +from_dict() EventRecord
+}
+class AIScores {
+    #int _career_relevance
+    #int _learning_value
+    #int _networking_value
+    +total_value() int
+    +to_dict() dict
+    +from_dict() AIScores
+}
+Entity <|-- StudentProfile
+Entity <|-- EventRecord
+Entity <|-- AIScores
+EventRecord "1" o-- "1" AIScores : retains scores
+DataManager ..> StudentProfile : loads and saves
+DataManager ..> EventRecord : loads and saves
+LogicManager ..> EventRecord : creates
+LogicManager ..> StudentProfile : checks
+AIManager ..> AIScores : validates and creates
+
+class GeminiClient {
+    +is_available() bool
+    +call(prompt) str
+}
+class PromptBuilder {
+    +build_schema_instruction() str
+    +build_analysis_prompt() str
+}
+AIManager o-- GeminiClient
+AIManager o-- PromptBuilder
+
+class ScoringStrategy {
+    <<abstract>>
+    +calculate(ai_scores)* int
+    +priority_for(value)* str
+}
+class StandardScoringStrategy {
+    +calculate(ai_scores) int
+    +priority_for(value) str
+}
+class RuleEngine {
+    #List~Rule~ _rules
+    +add_rule(rule)
+    +evaluate(ai_scores, workload, event_value) str
+}
+class Rule {
+    <<abstract>>
+    +str recommendation
+    +matches(ai_scores, workload, event_value)* bool
+    +get_recommendation() str
+}
+ScoringStrategy <|-- StandardScoringStrategy
+LogicManager o-- ScoringStrategy
+LogicManager o-- RuleEngine
+RuleEngine "1" o-- "0..*" Rule : ordered rules
+Rule <|-- TopScoresRule
+Rule <|-- HighValueLowWorkloadRule
+Rule <|-- HighValueHighWorkloadRule
+Rule <|-- MidValueLowWorkloadRule
+Rule <|-- MidValueHighWorkloadRule
+Rule <|-- LowValueRule
+
+class PersistenceStrategy {
+    <<abstract>>
+    +save(key, data)*
+    +load(key)*
+    +exists(key)* bool
+    +close()
+}
+class MongoStorage {
+    +save(key, data)
+    +load(key)
+    +exists(key) bool
+    +close()
+}
+class JsonStorage {
+    +save(key, data)
+    +load(key)
+    +exists(key) bool
+}
+class EventFilter {
+    +filter() List~EventRecord~
+}
+class AnalyticsReporter {
+    +generate_summary() dict
+}
+PersistenceStrategy <|-- MongoStorage
+PersistenceStrategy <|-- JsonStorage
+DataManager o-- PersistenceStrategy : replaceable storage
+DataManager o-- EventFilter
+DataManager o-- AnalyticsReporter
+EventFilter --> "0..*" EventRecord : queries
+AnalyticsReporter --> "0..*" EventRecord : summarises
+
+class GeoLocationUtils {
+    +validate_singapore_postal_code(postal_code)$ str
+}
+class TransitRoutingService {
+    <<abstract>>
+    +get_transit_route(origin, destination, departure)* TransitRoute
+}
+class GeoLocationService {
+    +get_transit_route(origin, destination, departure) TransitRoute
+}
+class JourneyPlanner {
+    +plan(origin, destination, event_start) tuple
+}
+class TravelEvaluator {
+    #int _arrival_buffer_minutes
+    #int _preferred_limit_minutes
+    +evaluate(event_start, route) TravelAssessment
+    +to_singapore_datetime(value, name)$ datetime
+}
+class TransitRoute {
+    #float _distance_km
+    #float _duration_minutes
+    #datetime _departure_time
+    #datetime _estimated_arrival
+    #str _provider
+    +from_onemap_response(response)$ TransitRoute
+}
+class TravelAssessment {
+    #str _status
+    #str _feasibility
+    #float _distance_km
+    #float _duration_minutes
+    #datetime _recommended_departure
+    #datetime _estimated_arrival
+    #str _error_code
+    +with_recommended_departure(departure) TravelAssessment
+}
+class TravelResult {
+    +to_dict() dict
+}
+GeoLocationUtils <|-- StudentProfile
+GeoLocationUtils <|-- GeoLocationService
+GeoLocationUtils <|-- JourneyPlanner
+TransitRoutingService <|-- GeoLocationService
+LogicManager o-- JourneyPlanner
+JourneyPlanner o-- TransitRoutingService
+JourneyPlanner o-- TravelEvaluator
+GeoLocationService ..> TransitRoute : creates
+TravelEvaluator ..> TransitRoute : evaluates
+TravelEvaluator ..> TravelAssessment : creates
+JourneyPlanner ..> TravelAssessment : returns
+IOManager ..> TravelResult : creates
+TravelResult --> "0..1" TravelAssessment : formats
+
+class EventWiseError {
+    <<exception>>
+}
+class GeoLocationError {
+    +code() str
+}
+EventWiseError <|-- APIError
+EventWiseError <|-- ResponseValidationError
+EventWiseError <|-- DataCorruptionError
+EventWiseError <|-- ValidationError
+EventWiseError <|-- DatabaseError
+EventWiseError <|-- GeoLocationError
+ValueError <|-- ValidationError
+Exception <|-- EventWiseError
+

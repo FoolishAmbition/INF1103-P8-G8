@@ -1,0 +1,61 @@
+flowchart TB
+    U["Student using web browser"]
+    G["Google Gemini API"]
+    O["Singapore OneMap API"]
+
+    subgraph SYSTEM["EventWise application"]
+        P1("1.0 Validate requests and format responses<br/>IOManager")
+        P2("2.0 Coordinate requests<br/>EventWise")
+        P3("3.0 Analyse event and validate AI output<br/>AIManager, PromptBuilder, GeminiClient")
+        P4("4.0 Score event and apply business rules<br/>LogicManager, ScoringStrategy, RuleEngine")
+        P5("5.0 Load and save profiles and events<br/>DataManager, PersistenceStrategy")
+        P6("6.0 Filter event history and calculate analytics<br/>EventFilter, AnalyticsReporter")
+        P7("7.0 Plan public-transport journey<br/>LogicManager, JourneyPlanner,<br/>GeoLocationService, TravelEvaluator")
+        P8("8.0 Format safe travel result<br/>TravelResult")
+
+        D1[("D1 Student profile<br/>MongoDB key: profile<br/>JSON fallback: profile.json")]
+        D2[("D2 Analysed event history<br/>MongoDB key: events<br/>JSON fallback: events.json")]
+    end
+
+    U -->|"Profile fields; event details and workload;<br/>optional travel inputs; history and analytics requests"| P1
+    P1 -->|"Validated input and query parameters"| P2
+    P1 -->|"Profile; recommendation and reasoning;<br/>travel advice; history; analytics; error messages"| U
+    P2 -->|"Response data or application errors"| P1
+
+    P2 -->|"Profile changes and retrieval requests"| P5
+    P5 -->|"Validated profile document"| D1
+    D1 -->|"Saved field of study, interests and home postal code"| P5
+    P5 -->|"Student profile or storage error"| P2
+
+    P2 -->|"Field of study, interests, event name and description"| P3
+    P3 -->|"Analysis prompt and required JSON schema"| G
+    G -->|"AI response or API error"| P3
+    P3 -->|"Validated scores, category and AI reasoning;<br/>or analysis error"| P2
+
+    P2 -->|"Validated AI scores and metadata;<br/>event details and workload"| P4
+    P4 -->|"EventRecord: total value, priority,<br/>ATTEND / MAYBE / SKIP and reasons"| P2
+
+    P2 -->|"New AI-enriched EventRecord"| P5
+    P5 -->|"Updated event record list"| D2
+    D2 -->|"Saved event records"| P5
+    P5 -->|"Updated history or storage error"| P2
+
+    P2 -->|"History request, filters or analytics request"| P5
+    P5 -->|"Loaded events and filter criteria or summary request"| P6
+    P6 -->|"Filtered events or aggregate statistics"| P5
+    P5 -->|"History, filtered events or analytics summary"| P2
+
+    P2 -->|"Origin choice and postal code; destination postal code;<br/>timezone-aware event start"| P7
+    P7 -->|"Postal search requests;<br/>transit route requests with proposed departure"| O
+    O -->|"Coordinates, itinerary distance and duration,<br/>departure and arrival times, or provider error"| P7
+    P7 -->|"TravelAssessment or skipped travel"| P2
+    P1 -->|"TravelAssessment or skipped travel"| P8
+    P8 -->|"Sanitised travel JSON: status, duration, distance,<br/>departure, arrival, feasibility, warnings or error"| P1
+
+    classDef external fill:#e8eefc,stroke:#355a9a,color:#172b4d
+    classDef process fill:#eaf6ef,stroke:#39825a,color:#173b27
+    classDef store fill:#fff4d9,stroke:#a77b22,color:#513b0b
+    class U,G,O external
+    class P1,P2,P3,P4,P5,P6,P7,P8 process
+    class D1,D2 store
+
