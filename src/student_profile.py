@@ -1,6 +1,6 @@
 from src.entity import Entity
 from src.exceptions import ValidationError
-from src.geolocation_service import GeoLocationService
+from src.transit_routing_service import TransitRoutingService
 
 
 class StudentProfile(Entity):
@@ -61,7 +61,7 @@ class StudentProfile(Entity):
 
     @staticmethod
     def validate_singapore_postal_code(postal_code: str) -> str:
-        return GeoLocationService.validate_singapore_postal_code(postal_code)
+        return TransitRoutingService.validate_singapore_postal_code(postal_code)
 
     def is_empty(self):
         return self.field_of_study == "" and len(self._interests) == 0

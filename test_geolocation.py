@@ -6,23 +6,29 @@ from datetime import datetime, timedelta
 from src.exceptions import GeoLocationError, ValidationError
 from src.geolocation_service import GeoLocationService
 from src.journey_planner import JourneyPlanner
+from src.transit_routing_service import TransitRoutingService
 from src.travel_result import TravelResult
 
 
 class TestPostalCodeValidation(unittest.TestCase):
     def test_valid_singapore_postal_codes(self):
+        self.assertEqual(TransitRoutingService.validate_singapore_postal_code("123456"), "123456")
+        self.assertEqual(TransitRoutingService.validate_singapore_postal_code("018956"), "018956")
+        # Ensure inherited method on GeoLocationService also works
         self.assertEqual(GeoLocationService.validate_singapore_postal_code("123456"), "123456")
         self.assertEqual(GeoLocationService.validate_singapore_postal_code("018956"), "018956")
 
     def test_invalid_singapore_postal_codes(self):
         with self.assertRaises(ValidationError):
-            GeoLocationService.validate_singapore_postal_code("12345")  # 5 digits
+            TransitRoutingService.validate_singapore_postal_code("12345")  # 5 digits
         with self.assertRaises(ValidationError):
-            GeoLocationService.validate_singapore_postal_code("1234567")  # 7 digits
+            TransitRoutingService.validate_singapore_postal_code("1234567")  # 7 digits
         with self.assertRaises(ValidationError):
-            GeoLocationService.validate_singapore_postal_code("ABC456")  # alphabetic
+            TransitRoutingService.validate_singapore_postal_code("ABC456")  # alphabetic
         with self.assertRaises(ValidationError):
-            GeoLocationService.validate_singapore_postal_code(123456)  # integer
+            TransitRoutingService.validate_singapore_postal_code(123456)  # integer
+        with self.assertRaises(ValidationError):
+            GeoLocationService.validate_singapore_postal_code("12345")
 
 
 class TestJourneyPlannerEvaluation(unittest.TestCase):

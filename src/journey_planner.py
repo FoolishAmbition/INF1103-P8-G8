@@ -4,7 +4,6 @@ import math
 from datetime import datetime, timedelta
 
 from src.exceptions import ValidationError, GeoLocationError
-from src.geolocation_service import GeoLocationService
 from src.transit_routing_service import TransitRoutingService
 from src.travel_result import TravelResult
 
@@ -41,7 +40,7 @@ class JourneyPlanner:
 
     @staticmethod
     def _now():
-        return datetime.now(GeoLocationService.SINGAPORE_TIMEZONE)
+        return datetime.now(TransitRoutingService.SINGAPORE_TIMEZONE)
 
     def _unavailable_assessment(self, error_code=None, message=None, event_start=None):
         return TravelResult(
@@ -112,7 +111,7 @@ class JourneyPlanner:
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValidationError(f"{name} must be a timezone-aware datetime.")
         try:
-            return value.astimezone(GeoLocationService.SINGAPORE_TIMEZONE)
+            return value.astimezone(TransitRoutingService.SINGAPORE_TIMEZONE)
         except (OverflowError, ValueError):
             raise ValidationError(f"{name} exceeds the supported date range.") from None
 
@@ -166,8 +165,8 @@ class JourneyPlanner:
                     ),
                     code,
                 )
-            GeoLocationService.validate_singapore_postal_code(origin_postal_code)
-            GeoLocationService.validate_singapore_postal_code(destination_postal_code)
+            TransitRoutingService.validate_singapore_postal_code(origin_postal_code)
+            TransitRoutingService.validate_singapore_postal_code(destination_postal_code)
             now = self._clock()
             if event_start_singapore <= now:
                 code = "EVENT_PAST"

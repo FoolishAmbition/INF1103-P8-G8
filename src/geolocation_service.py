@@ -7,7 +7,6 @@ from datetime import datetime
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
-from zoneinfo import ZoneInfo
 
 from src.exceptions import ValidationError, GeoLocationError
 from src.transit_routing_service import TransitRoutingService
@@ -18,7 +17,6 @@ class GeoLocationService(TransitRoutingService):
     """Resolve postal codes and retrieve departure-based public transport routes."""
 
     BASE_URL = "https://www.onemap.gov.sg"
-    SINGAPORE_TIMEZONE = ZoneInfo("Asia/Singapore")
 
     _HTTP_STATUS_ERRORS = {
         401: ("AUTHENTICATION_ERROR", "OneMap authentication failed."),
@@ -44,17 +42,6 @@ class GeoLocationService(TransitRoutingService):
         if not self._is_number(timeout_seconds) or timeout_seconds <= 0:
             raise ValidationError("Request timeout must be a positive number.")
         self._timeout_seconds = timeout_seconds
-
-    @staticmethod
-    def validate_singapore_postal_code(postal_code: str) -> str:
-        """Return a valid six-digit postal code, preserving any leading zero."""
-        if not isinstance(postal_code, str):
-            raise ValidationError("Singapore postal code must be a string.")
-
-        if len(postal_code) != 6 or not postal_code.isascii() or not postal_code.isdigit():
-            raise ValidationError("Singapore postal code must contain exactly six digits.")
-
-        return postal_code
 
     def get_transit_route(
         self,
