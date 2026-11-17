@@ -1,14 +1,16 @@
-"""Sanitized travel response data for the web interface."""
+"""Consolidated travel domain model, OneMap transit parser, and presentation serializer."""
 
-from datetime import timedelta
+import math
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
-from src.exceptions import ValidationError
-from src.travel_assessment import TravelAssessment
-from src.travel_evaluator import TravelEvaluator
+from src.exceptions import ValidationError, GeoLocationError
 
 
 class TravelResult:
-    """Convert a travel assessment into the stable, privacy-safe GUI schema."""
+    """Unified transit route, journey assessment, and safe GUI response model."""
+
+    SINGAPORE_TIMEZONE = ZoneInfo("Asia/Singapore")
 
     _ERROR_MESSAGES = {
         "MISSING_ORIGIN": "Choose another postal code or add a saved home before planning travel.",
@@ -27,28 +29,356 @@ class TravelResult:
         "PROVIDER_ERROR": "The transit service could not provide a journey.",
     }
 
-    def __init__(self, assessment: TravelAssessment | None = None):
-        if assessment is not None and not isinstance(assessment, TravelAssessment):
-            raise ValidationError("Assessment must be a TravelAssessment or None.")
-        self._assessment = assessment
+    def __init__(
+        self,
+        *args,
+        status=None,
+        feasibility=None,
+        arrival_buffer_minutes=None,
+        distance_km=None,
+        duration_minutes=None,
+        departure_time=None,
+        recommended_departure=None,
+        estimated_arrival=None,
+        provider="OneMap",
+        error_message=None,
+        error_code=None,
+        event_start=None,
+        preferred_limit_minutes=None,
+    ):
+        # Support wrapping / copying an existing TravelResult or None (skipped)
+        if len(args) == 1:
+            arg0 = args[0]
+            if arg0 is None:
+                status = status or "SKIPPED"
+            elif isinstance(arg0, TravelResult):
+                status = status or arg0.status
+                feasibility = feasibility or arg0.feasibility
+                arrival_buffer_minutes = (
+                    arrival_buffer_minutes
+                    if arrival_buffer_minutes is not None
+                    else arg0.arrival_buffer_minutes
+                )
+                distance_km = (
+                    distance_km if distance_km is not None else arg0.distance_km
+                )
+                duration_minutes = (
+                    duration_minutes
+                    if duration_minutes is not None
+                    else arg0.duration_minutes
+                )
+                departure_time = departure_time or arg0.departure_time
+                recommended_departure = (
+                    recommended_departure or arg0.recommended_departure
+                )
+                estimated_arrival = estimated_arrival or arg0.estimated_arrival
+                provider = (
+                    provider
+                    if provider != "OneMap" or arg0.provider is None
+                    else arg0.provider
+                )
+                error_message = error_message or arg0.error_message
+                error_code = error_code or arg0.error_code
+                event_start = event_start or arg0.event_start
+                preferred_limit_minutes = (
+                    preferred_limit_minutes
+                    if preferred_limit_minutes is not None
+                    else arg0.preferred_limit_minutes
+                )
+            elif isinstance(arg0, str):
+                status = arg0
+            elif isinstance(arg0, (int, float)) and not isinstance(arg0, bool):
+                distance_km = float(arg0)
+                status = status or "AVAILABLE"
+            else:
+                raise ValidationError("Invalid argument for TravelResult.")
+        elif len(args) > 1:
+            # Handle positional arguments from previous TransitRoute:
+            # (distance_km, duration_minutes, departure_time, estimated_arrival, [provider])
+            if isinstance(args[0], (int, float)) and not isinstance(args[0], bool):
+                distance_km = float(args[0])
+                status = status or "AVAILABLE"
+                if len(args) > 1:
+                    duration_minutes = float(args[1])
+                if len(args) > 2:
+                    departure_time = args[2]
+                if len(args) > 3:
+                    estimated_arrival = args[3]
+                if len(args) > 4:
+                    provider = args[4]
+            # Handle positional arguments from previous TravelAssessment:
+            # (status, feasibility, arrival_buffer_minutes, distance_km, ...)
+            elif isinstance(args[0], str):
+                status = args[0]
+                if len(args) > 1:
+                    feasibility = args[1]
+                if len(args) > 2:
+                    arrival_buffer_minutes = args[2]
+                if len(args) > 3:
+                    distance_km = args[3]
+                if len(args) > 4:
+                    duration_minutes = args[4]
+                if len(args) > 5:
+                    recommended_departure = args[5]
+                if len(args) > 6:
+                    estimated_arrival = args[6]
+                if len(args) > 7:
+                    provider = args[7]
+                if len(args) > 8:
+                    error_message = args[8]
+                if len(args) > 9:
+                    error_code = args[9]
+                if len(args) > 10:
+                    event_start = args[10]
+                if len(args) > 11:
+                    preferred_limit_minutes = args[11]
+
+        self._status = status or "AVAILABLE"
+        self._feasibility = feasibility
+        self._arrival_buffer_minutes = arrival_buffer_minutes
+        self._distance_km = distance_km
+        self._duration_minutes = duration_minutes
+        self._departure_time = departure_time
+        self._recommended_departure = recommended_departure
+        self._estimated_arrival = estimated_arrival
+        self._provider = provider
+        self._error_message = error_message
+        self._error_code = error_code
+        self._event_start = event_start
+        self._preferred_limit_minutes = preferred_limit_minutes
+
+    @property
+    def status(self):
+        return self._status
+
+    @property
+    def feasibility(self):
+        return self._feasibility
+
+    @property
+    def arrival_buffer_minutes(self):
+        return self._arrival_buffer_minutes
+
+    @property
+    def distance_km(self):
+        return self._distance_km
+
+    @property
+    def duration_minutes(self):
+        return self._duration_minutes
+
+    @property
+    def departure_time(self):
+        return self._departure_time
+
+    @property
+    def recommended_departure(self):
+        return self._recommended_departure
+
+    @property
+    def estimated_arrival(self):
+        return self._estimated_arrival
+
+    @property
+    def provider(self):
+        return self._provider
+
+    @property
+    def error_message(self):
+        return self._error_message
+
+    @property
+    def error_code(self):
+        return self._error_code
+
+    @property
+    def event_start(self):
+        return self._event_start
+
+    @property
+    def preferred_limit_minutes(self):
+        return self._preferred_limit_minutes
+
+    def with_recommended_departure(self, departure):
+        """Return a copy with the departure time used for the final route check."""
+        return TravelResult(
+            status=self.status,
+            feasibility=self.feasibility,
+            arrival_buffer_minutes=self.arrival_buffer_minutes,
+            distance_km=self.distance_km,
+            duration_minutes=self.duration_minutes,
+            departure_time=self.departure_time,
+            recommended_departure=departure,
+            estimated_arrival=self.estimated_arrival,
+            provider=self.provider,
+            error_message=self.error_message,
+            error_code=self.error_code,
+            event_start=self.event_start,
+            preferred_limit_minutes=self.preferred_limit_minutes,
+        )
+
+    def __eq__(self, other):
+        if type(other) is not type(self):
+            return NotImplemented
+        return vars(self) == vars(other)
+
+    @classmethod
+    def from_onemap_response(cls, response: dict) -> "TravelResult":
+        """Validate and construct a route from OneMap API JSON."""
+        if not isinstance(response, dict):
+            raise GeoLocationError(
+                "INVALID_RESPONSE", "OneMap returned invalid or incomplete data."
+            )
+
+        plan = response.get("plan")
+        if plan is None:
+            raise GeoLocationError("NO_ROUTE", "OneMap returned no transit itinerary.")
+        if not isinstance(plan, dict):
+            raise GeoLocationError(
+                "INVALID_RESPONSE", "OneMap returned invalid or incomplete data."
+            )
+
+        itineraries = plan.get("itineraries")
+        if not isinstance(itineraries, list):
+            raise GeoLocationError(
+                "INVALID_RESPONSE", "OneMap returned invalid or incomplete data."
+            )
+        if not itineraries:
+            raise GeoLocationError("NO_ROUTE", "OneMap returned no transit itinerary.")
+
+        itinerary = itineraries[0]
+        if not isinstance(itinerary, dict):
+            raise GeoLocationError(
+                "INVALID_RESPONSE", "OneMap returned invalid or incomplete data."
+            )
+
+        duration_seconds = itinerary.get("duration")
+        start_time_ms = itinerary.get("startTime")
+        end_time_ms = itinerary.get("endTime")
+        legs = itinerary.get("legs")
+
+        if not cls._is_valid_number(duration_seconds, min_val=0, allow_zero=False):
+            raise GeoLocationError(
+                "INVALID_RESPONSE", "OneMap returned invalid or incomplete data."
+            )
+        if not cls._is_valid_number(start_time_ms) or not cls._is_valid_number(
+            end_time_ms
+        ):
+            raise GeoLocationError(
+                "INVALID_RESPONSE", "OneMap returned invalid or incomplete data."
+            )
+        if end_time_ms <= start_time_ms:
+            raise GeoLocationError(
+                "INVALID_RESPONSE", "OneMap returned invalid or incomplete data."
+            )
+        if not isinstance(legs, list) or not legs:
+            raise GeoLocationError(
+                "INVALID_RESPONSE", "OneMap returned invalid or incomplete data."
+            )
+
+        distance_meters = cls._sum_leg_distances(legs)
+
+        try:
+            departure = datetime.fromtimestamp(
+                start_time_ms / 1000, tz=cls.SINGAPORE_TIMEZONE
+            )
+            arrival = datetime.fromtimestamp(
+                end_time_ms / 1000, tz=cls.SINGAPORE_TIMEZONE
+            )
+        except (ValueError, OverflowError, OSError):
+            raise GeoLocationError(
+                "INVALID_RESPONSE", "OneMap returned invalid or incomplete data."
+            ) from None
+
+        return cls(
+            status="AVAILABLE",
+            distance_km=distance_meters / 1000,
+            duration_minutes=duration_seconds / 60,
+            departure_time=departure,
+            estimated_arrival=arrival,
+            provider="OneMap",
+        )
+
+    @classmethod
+    def _sum_leg_distances(cls, legs: list) -> float:
+        """Sum distance across route legs, ensuring non-negative finite values."""
+        total_meters = 0.0
+        for leg in legs:
+            if not isinstance(leg, dict):
+                raise GeoLocationError(
+                    "INVALID_RESPONSE", "OneMap returned invalid or incomplete data."
+                )
+            leg_distance = leg.get("distance")
+            if not cls._is_valid_number(leg_distance, min_val=0, allow_zero=True):
+                raise GeoLocationError(
+                    "INVALID_RESPONSE", "OneMap returned invalid or incomplete data."
+                )
+            total_meters += leg_distance
+
+        if not math.isfinite(total_meters) or total_meters <= 0:
+            raise GeoLocationError(
+                "INVALID_RESPONSE", "OneMap returned invalid or incomplete data."
+            )
+        return total_meters
+
+    @staticmethod
+    def _is_valid_number(value, min_val=None, allow_zero=True) -> bool:
+        """Return True if value is a real finite number (rejecting booleans)."""
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return False
+        try:
+            if not math.isfinite(value):
+                return False
+        except OverflowError:
+            return False
+
+        if min_val is not None:
+            if allow_zero and value < min_val:
+                return False
+            if not allow_zero and value <= min_val:
+                return False
+        return True
+
+    @staticmethod
+    def _validate_number(value, name, allow_zero=False):
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            raise ValidationError(f"{name} must be a finite number.")
+        try:
+            finite = math.isfinite(value)
+        except OverflowError:
+            finite = False
+        if not finite:
+            raise ValidationError(f"{name} must be a finite number.")
+        if value < 0:
+            raise ValidationError(f"{name} is outside the allowed range.")
+        if value == 0 and not allow_zero:
+            raise ValidationError(f"{name} is outside the allowed range.")
+
+    @classmethod
+    def _to_singapore_datetime(cls, value, name):
+        """Ensure datetime has timezone and convert to Singapore Standard Time."""
+        if not isinstance(value, datetime):
+            raise ValidationError(f"{name} must be a timezone-aware datetime.")
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValidationError(f"{name} must be a timezone-aware datetime.")
+        try:
+            return value.astimezone(cls.SINGAPORE_TIMEZONE)
+        except (OverflowError, ValueError):
+            raise ValidationError(f"{name} exceeds the supported date range.") from None
 
     def to_dict(self) -> dict:
-        assessment = self._assessment
-        status = "SKIPPED" if assessment is None else assessment.status
-        if assessment is not None and status not in ("AVAILABLE", "UNAVAILABLE"):
-            raise ValidationError("Assessment status must be AVAILABLE or UNAVAILABLE.")
-        if (
-            assessment is not None
-            and assessment.error_code is not None
-            and status != "UNAVAILABLE"
-        ):
+        """Convert travel result into the stable, privacy-safe GUI schema."""
+        status = self._status
+        if status not in ("AVAILABLE", "UNAVAILABLE", "SKIPPED"):
+            raise ValidationError(
+                "Assessment status must be AVAILABLE, UNAVAILABLE, or SKIPPED."
+            )
+        if self._error_code is not None and status != "UNAVAILABLE":
             raise ValidationError("Only unavailable travel can have an error code.")
 
-        preferred_limit = (
-            None if assessment is None else assessment.preferred_limit_minutes
-        )
+        preferred_limit = self._preferred_limit_minutes
         if preferred_limit is not None:
-            TravelEvaluator.validate_number(preferred_limit, "Preferred journey limit")
+            self._validate_number(preferred_limit, "Preferred journey limit")
 
         result = {
             "schema_version": 1,
@@ -71,14 +401,15 @@ class TravelResult:
         if status == "SKIPPED":
             return result
 
-        TravelEvaluator.validate_number(
-            assessment.arrival_buffer_minutes, "Arrival buffer", allow_zero=True
-        )
-        result["arrival_buffer_minutes"] = assessment.arrival_buffer_minutes
-        result["provider"] = "OneMap"
+        if self._arrival_buffer_minutes is not None:
+            self._validate_number(
+                self._arrival_buffer_minutes, "Arrival buffer", allow_zero=True
+            )
+            result["arrival_buffer_minutes"] = self._arrival_buffer_minutes
+        result["provider"] = self._provider or "OneMap"
 
         if status == "UNAVAILABLE":
-            error_code = assessment.error_code
+            error_code = self._error_code
             if not isinstance(error_code, str) or error_code not in self._ERROR_MESSAGES:
                 error_code = "TRAVEL_UNAVAILABLE"
             result["feasibility"] = "UNAVAILABLE"
@@ -86,32 +417,28 @@ class TravelResult:
             result["error_message"] = self._ERROR_MESSAGES[error_code]
             return result
 
-        if assessment.feasibility not in ("WITHIN_LIMIT", "LONG_JOURNEY"):
+        if self._feasibility not in ("WITHIN_LIMIT", "LONG_JOURNEY"):
             raise ValidationError("Available travel must have a valid feasibility.")
-        TravelEvaluator.validate_number(assessment.distance_km, "Journey distance")
-        TravelEvaluator.validate_number(assessment.duration_minutes, "Journey duration")
-        departure = TravelEvaluator.to_singapore_datetime(
-            assessment.recommended_departure, "Departure"
-        )
-        arrival = TravelEvaluator.to_singapore_datetime(
-            assessment.estimated_arrival, "Arrival"
-        )
+        self._validate_number(self._distance_km, "Journey distance")
+        self._validate_number(self._duration_minutes, "Journey duration")
+
+        dep_dt = self._recommended_departure or self._departure_time
+        departure = self._to_singapore_datetime(dep_dt, "Departure")
+        arrival = self._to_singapore_datetime(self._estimated_arrival, "Arrival")
+
         result.update(
-            distance_km=assessment.distance_km,
-            duration_minutes=assessment.duration_minutes,
+            distance_km=self._distance_km,
+            duration_minutes=self._duration_minutes,
             recommended_departure=departure.isoformat(),
             estimated_arrival=arrival.isoformat(),
-            feasibility=assessment.feasibility,
+            feasibility=self._feasibility,
         )
 
-        if assessment.event_start is not None:
-            event_start = TravelEvaluator.to_singapore_datetime(
-                assessment.event_start, "Event start"
-            )
+        if self._event_start is not None:
+            event_start = self._to_singapore_datetime(self._event_start, "Event start")
+            buffer_mins = self._arrival_buffer_minutes or 0
             try:
-                target_arrival = event_start - timedelta(
-                    minutes=assessment.arrival_buffer_minutes
-                )
+                target_arrival = event_start - timedelta(minutes=buffer_mins)
             except OverflowError:
                 raise ValidationError(
                     "Arrival buffer exceeds the supported date range."

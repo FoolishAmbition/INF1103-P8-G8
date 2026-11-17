@@ -19,16 +19,14 @@ from src.exceptions import (
     ResponseValidationError,
     ValidationError,
 )
-from src.geolocation_utils import GeoLocationUtils
+from src.geolocation_service import GeoLocationService
 from src.journey_planner import JourneyPlanner
 from src.logic_manager import LogicManager
 from src.prompt_builder import PromptBuilder
 from src.storage import PersistenceStrategy
 from src.student_profile import StudentProfile
-from src.transit_route import TransitRoute
 from src.transit_routing_service import TransitRoutingService
-from src.travel_assessment import TravelAssessment
-from src.travel_evaluator import TravelEvaluator
+from src.travel_result import TravelResult
 
 
 class MemoryStorage(PersistenceStrategy):
@@ -54,7 +52,7 @@ class FixedRoutingService(TransitRoutingService):
 
     def get_transit_route(self, origin_postal_code, destination_postal_code, departure_time):
         self.departures.append(departure_time)
-        return TransitRoute(
+        return TravelResult(
             distance_km=5,
             duration_minutes=30,
             departure_time=departure_time,
@@ -123,7 +121,7 @@ class AuditRemediationTests(unittest.TestCase):
 
     def test_domain_and_route_properties_are_read_only(self):
         scores = AIScores(4, 3, 5)
-        route = TransitRoute(
+        route = TravelResult(
             distance_km=5,
             duration_minutes=30,
             departure_time=datetime(2025, 1, 1),
@@ -178,7 +176,7 @@ class AuditRemediationTests(unittest.TestCase):
                     create_record(**overrides)
 
     def test_travel_assessments_are_read_only_and_departure_updates_copy(self):
-        assessment = TravelAssessment(
+        assessment = TravelResult(
             status="AVAILABLE",
             feasibility="WITHIN_LIMIT",
             arrival_buffer_minutes=15,
@@ -195,13 +193,12 @@ class AuditRemediationTests(unittest.TestCase):
             assessment.status = "UNAVAILABLE"
 
     def test_journey_planner_returns_immutable_assessment_with_checked_departure(self):
-        singapore = GeoLocationUtils.SINGAPORE_TIMEZONE
+        singapore = GeoLocationService.SINGAPORE_TIMEZONE
         now = datetime(2025, 1, 1, 8, 0, tzinfo=singapore)
         event_start = datetime(2025, 1, 1, 10, 0, tzinfo=singapore)
         service = FixedRoutingService()
         planner = JourneyPlanner(
             service,
-            TravelEvaluator(),
             clock=lambda: now,
         )
 

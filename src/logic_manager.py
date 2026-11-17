@@ -9,13 +9,12 @@ from src.ai_scores import AIScores
 from src.base_manager import BaseManager
 from src.event_record import EventRecord
 from src.exceptions import ValidationError
-from src.geolocation import GeoLocationService
+from src.geolocation_service import GeoLocationService
 from src.journey_planner import JourneyPlanner
 from src.rules import RuleEngine
 from src.scoring import ScoringStrategy, StandardScoringStrategy
 from src.student_profile import StudentProfile
-from src.travel_assessment import TravelAssessment
-from src.travel_evaluator import TravelEvaluator
+from src.travel_result import TravelResult
 
 class LogicManager(BaseManager):
     def __init__(
@@ -30,7 +29,7 @@ class LogicManager(BaseManager):
         self._journey_planner = (
             journey_planner
             if journey_planner is not None
-            else JourneyPlanner(GeoLocationService(), TravelEvaluator())
+            else JourneyPlanner(GeoLocationService())
         )
 
     # -- scoring --------------------------------------------------------
@@ -107,12 +106,12 @@ class LogicManager(BaseManager):
 
     def assess_travel(
         self, travel: dict, profile: StudentProfile
-    ) -> TravelAssessment | None:
+    ) -> TravelResult | None:
         """Coordinate travel assessment without exposing transit data to AI."""
         event_start = None
 
         def unavailable(error_code):
-            return TravelAssessment(
+            return TravelResult(
                 status="UNAVAILABLE",
                 feasibility="UNAVAILABLE",
                 arrival_buffer_minutes=self._journey_planner.arrival_buffer_minutes,
@@ -138,7 +137,7 @@ class LogicManager(BaseManager):
         if not isinstance(start_text, str):
             return unavailable("INVALID_INPUT")
         try:
-            event_start = TravelEvaluator.to_singapore_datetime(
+            event_start = JourneyPlanner.to_singapore_datetime(
                 datetime.fromisoformat(start_text), "Event start"
             )
         except (ValueError, ValidationError):

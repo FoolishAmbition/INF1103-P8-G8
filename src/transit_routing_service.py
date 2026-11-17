@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.geolocation import TransitRoute
+    from src.travel_result import TravelResult
 
 
 class TransitRoutingService(ABC):
@@ -17,6 +17,6 @@ class TransitRoutingService(ABC):
         origin_postal_code: str,
         destination_postal_code: str,
         departure_time: datetime,
-    ) -> "TransitRoute":
+    ) -> "TravelResult":
         """Return the itinerary requested for the supplied departure time."""
         raise NotImplementedError

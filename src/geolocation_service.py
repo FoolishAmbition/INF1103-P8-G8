@@ -7,18 +7,18 @@ from datetime import datetime
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo
 
-from src.exceptions import ValidationError
-from src.geolocation_error import GeoLocationError
-from src.geolocation_utils import GeoLocationUtils
-from src.transit_route import TransitRoute
+from src.exceptions import ValidationError, GeoLocationError
 from src.transit_routing_service import TransitRoutingService
+from src.travel_result import TravelResult
 
 
-class GeoLocationService(GeoLocationUtils, TransitRoutingService):
+class GeoLocationService(TransitRoutingService):
     """Resolve postal codes and retrieve departure-based public transport routes."""
 
     BASE_URL = "https://www.onemap.gov.sg"
+    SINGAPORE_TIMEZONE = ZoneInfo("Asia/Singapore")
 
     _HTTP_STATUS_ERRORS = {
         401: ("AUTHENTICATION_ERROR", "OneMap authentication failed."),
@@ -45,12 +45,23 @@ class GeoLocationService(GeoLocationUtils, TransitRoutingService):
             raise ValidationError("Request timeout must be a positive number.")
         self._timeout_seconds = timeout_seconds
 
+    @staticmethod
+    def validate_singapore_postal_code(postal_code: str) -> str:
+        """Return a valid six-digit postal code, preserving any leading zero."""
+        if not isinstance(postal_code, str):
+            raise ValidationError("Singapore postal code must be a string.")
+
+        if len(postal_code) != 6 or not postal_code.isascii() or not postal_code.isdigit():
+            raise ValidationError("Singapore postal code must contain exactly six digits.")
+
+        return postal_code
+
     def get_transit_route(
         self,
         home_postal_code: str,
         destination_postal_code: str,
         departure_time: datetime,
-    ) -> TransitRoute:
+    ) -> TravelResult:
         """Resolve two postals and request one itinerary at the supplied departure."""
         self.validate_singapore_postal_code(home_postal_code)
         self.validate_singapore_postal_code(destination_postal_code)
@@ -63,7 +74,7 @@ class GeoLocationService(GeoLocationUtils, TransitRoutingService):
         if not self._token:
             raise GeoLocationError("AUTHENTICATION_ERROR", "OneMap access token is missing.")
 
-        departure_time = departure_time.astimezone(GeoLocationUtils.SINGAPORE_TIMEZONE)
+        departure_time = departure_time.astimezone(self.SINGAPORE_TIMEZONE)
         origin = self._resolve_postal_code(home_postal_code)
         destination = self._resolve_postal_code(destination_postal_code)
         response = self._request_json(
@@ -178,8 +189,8 @@ class GeoLocationService(GeoLocationUtils, TransitRoutingService):
         raise GeoLocationError("PROVIDER_ERROR", "OneMap rejected the request.")
 
     def _parse_transit_route(self, response):
-        """Delegate route parsing to TransitRoute factory method."""
-        return TransitRoute.from_onemap_response(response)
+        """Delegate route parsing to TravelResult factory method."""
+        return TravelResult.from_onemap_response(response)
 
     @staticmethod
     def _is_number(value):

@@ -8,7 +8,6 @@ from flask import current_app, jsonify, render_template, request
 from src.base_manager import BaseManager
 from src.event_record import EventRecord
 from src.student_profile import StudentProfile
-from src.travel_assessment import TravelAssessment
 from src.travel_result import TravelResult
 
 
@@ -157,7 +156,7 @@ class IOManager(BaseManager):
         )
 
     def sanitize_travel_result(
-        self, assessment: TravelAssessment | None = None
+        self, assessment: TravelResult | None = None
     ) -> dict:
         """Format travel data as a safe GUI response."""
         return TravelResult(assessment).to_dict()

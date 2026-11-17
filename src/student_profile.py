@@ -1,9 +1,9 @@
 from src.entity import Entity
 from src.exceptions import ValidationError
-from src.geolocation_utils import GeoLocationUtils
+from src.geolocation_service import GeoLocationService
 
 
-class StudentProfile(Entity, GeoLocationUtils):
+class StudentProfile(Entity):
     def __init__(self, field_of_study="", interests=None, home_postal_code=""):
         self._field_of_study = self.clean_text(field_of_study, "field_of_study")
         self._interests = []
@@ -58,6 +58,10 @@ class StudentProfile(Entity, GeoLocationUtils):
                 self._interests.remove(existing)
                 return
         raise ValidationError(f"Interest '{interest}' not found in profile.")
+
+    @staticmethod
+    def validate_singapore_postal_code(postal_code: str) -> str:
+        return GeoLocationService.validate_singapore_postal_code(postal_code)
 
     def is_empty(self):
         return self.field_of_study == "" and len(self._interests) == 0
