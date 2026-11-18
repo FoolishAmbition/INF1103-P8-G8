@@ -124,6 +124,18 @@ class EventWise:
             if ai_result is None:
                 return self._io_manager.send_error(ai_error or "AI analysis was unsuccessful.", 502)
 
+            # Assess travel planning first (if provided)
+            travel_data = data.get("travel", {})
+            assessment = self._logic_manager.assess_travel(travel_data, profile)
+            travel_result = self._io_manager.sanitize_travel_result(assessment)
+
+            # Build a privacy-safe summary snapshot for persistence (legs removed)
+            travel_snapshot = dict(travel_result) if travel_result and travel_result.get("status") != "SKIPPED" else None
+            if travel_snapshot:
+                travel_snapshot["legs"] = None
+
+            dest_postal = travel_data.get("destination_postal_code", "") if isinstance(travel_data, dict) else ""
+
             record = self._logic_manager.create_event_record(
                 ai_result["ai_scores"],
                 ai_result["event_category"],
@@ -131,12 +143,11 @@ class EventWise:
                 data["event_name"],
                 data["event_description"],
                 data["workload"],
+                destination_postal_code=dest_postal,
+                travel_snapshot=travel_snapshot,
             )
 
             all_events = self._data_manager.add_event(record)
-
-            assessment = self._logic_manager.assess_travel(data.get("travel", {}), profile)
-            travel_result = self._io_manager.sanitize_travel_result(assessment)
             return self._io_manager.send_analysis(record, all_events, travel_result)
         except EventWiseError as exc:
             return self._io_manager.send_server_error(exc)

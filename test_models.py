@@ -145,10 +145,35 @@ class TestEventRecord(unittest.TestCase):
             recommendation="MAYBE",
             event_category="Hackathon",
             reason="High workload consideration.",
+            destination_postal_code="569830",
+            travel_snapshot={"status": "AVAILABLE", "duration_minutes": 25, "distance_km": 4.2},
         )
         data = record.to_dict()
+        self.assertEqual(data["destination_postal_code"], "569830")
+        self.assertEqual(data["travel_snapshot"]["status"], "AVAILABLE")
         restored = EventRecord.from_dict(data)
         self.assertEqual(record, restored)
+        self.assertEqual(restored.destination_postal_code, "569830")
+        self.assertEqual(restored.travel_snapshot["duration_minutes"], 25)
+
+    def test_invalid_destination_postal_raises_validation_error(self):
+        with self.assertRaises(ValidationError):
+            EventRecord(
+                "Event", "Desc", "Low", ai_scores=self.scores,
+                recommendation="ATTEND", destination_postal_code="12345"  # 5 digits
+            )
+
+    def test_invalid_travel_snapshot_raises_validation_error(self):
+        with self.assertRaises(ValidationError):
+            EventRecord(
+                "Event", "Desc", "Low", ai_scores=self.scores,
+                recommendation="ATTEND", travel_snapshot="not-a-dict"
+            )
+        with self.assertRaises(ValidationError):
+            EventRecord(
+                "Event", "Desc", "Low", ai_scores=self.scores,
+                recommendation="ATTEND", travel_snapshot={"status": "INVALID_STATUS"}
+            )
 
 
 if __name__ == "__main__":

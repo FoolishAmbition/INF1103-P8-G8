@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
+import json
 
 from src.ai_scores import AIScores
 from src.entity import Entity
 from src.exceptions import ValidationError
+from src.transit_routing_service import TransitRoutingService
 
 VALID_WORKLOADS = ("Low", "Medium", "High")
 VALID_PRIORITIES = ("Low", "Medium", "High")
@@ -23,6 +25,8 @@ class EventRecord(Entity):
         reason="",
         priority="",
         event_value=None,
+        destination_postal_code="",
+        travel_snapshot=None,
     ):
         # Text fields
         self._event_name = self.clean_text(event_name, "event_name")
@@ -43,6 +47,20 @@ class EventRecord(Entity):
                 f"Invalid workload '{workload_text}'. Allowed: {VALID_WORKLOADS}."
             )
         self._workload = workload_text
+
+        # Destination postal code
+        if destination_postal_code is None:
+            destination_postal_code = ""
+        if isinstance(destination_postal_code, str):
+            destination_postal_code = destination_postal_code.strip()
+        else:
+            raise ValidationError("destination_postal_code must be a string.")
+        if destination_postal_code != "":
+            TransitRoutingService.validate_singapore_postal_code(destination_postal_code)
+        self._destination_postal_code = destination_postal_code
+
+        # Travel snapshot
+        self._travel_snapshot = self._copy_travel_snapshot(travel_snapshot)
 
         # Accept the domain object or its serialized form.
         if isinstance(ai_scores, dict):
@@ -152,6 +170,28 @@ class EventRecord(Entity):
     def networking_value(self):
         return self.ai_scores.networking_value if self.ai_scores else None
 
+    @property
+    def destination_postal_code(self):
+        return self._destination_postal_code
+
+    @property
+    def travel_snapshot(self):
+        return json.loads(json.dumps(self._travel_snapshot)) if self._travel_snapshot is not None else None
+
+    @staticmethod
+    def _copy_travel_snapshot(snapshot):
+        if snapshot is None:
+            return None
+        if not isinstance(snapshot, dict):
+            raise ValidationError("travel_snapshot must be a dictionary or None.")
+        status = snapshot.get("status")
+        if status not in ("SKIPPED", "AVAILABLE", "UNAVAILABLE"):
+            raise ValidationError("travel_snapshot must have a valid status.")
+        try:
+            return json.loads(json.dumps(snapshot, allow_nan=False))
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValidationError("travel_snapshot must contain valid JSON.") from exc
+
     @staticmethod
     def _normalize_timestamp(timestamp):
         if timestamp is None:
@@ -196,6 +236,8 @@ class EventRecord(Entity):
             "priority": self.priority,
             "event_value": self.event_value,
             "ai_scores": scores_dict,
+            "destination_postal_code": self.destination_postal_code,
+            "travel_snapshot": self.travel_snapshot,
         }
 
     @classmethod
@@ -216,6 +258,8 @@ class EventRecord(Entity):
             reason=data.get("reason", ""),
             priority=data.get("priority", ""),
             event_value=data.get("event_value"),
+            destination_postal_code=data.get("destination_postal_code", ""),
+            travel_snapshot=data.get("travel_snapshot"),
         )
 
     def __eq__(self, other):

@@ -14,6 +14,7 @@ from src.journey_planner import JourneyPlanner
 from src.rules import RuleEngine
 from src.scoring import ScoringStrategy, StandardScoringStrategy
 from src.student_profile import StudentProfile
+from src.transit_routing_service import TransitRoutingService
 from src.travel_result import TravelResult
 
 class LogicManager(BaseManager):
@@ -88,8 +89,17 @@ class LogicManager(BaseManager):
         event_name: str,
         event_description: str,
         workload: str,
+        destination_postal_code: str = "",
+        travel_snapshot: dict | None = None,
     ) -> EventRecord:
         """Apply event rules and construct the resulting domain record."""
+        valid_dest = ""
+        if destination_postal_code:
+            try:
+                valid_dest = TransitRoutingService.validate_singapore_postal_code(str(destination_postal_code).strip())
+            except ValidationError:
+                valid_dest = ""
+
         summary = self.generate_summary(
             ai_scores, event_category, ai_reasoning, workload
         )
@@ -97,6 +107,8 @@ class LogicManager(BaseManager):
             event_name=event_name,
             event_description=event_description,
             workload=workload,
+            destination_postal_code=valid_dest,
+            travel_snapshot=travel_snapshot,
         )
         return EventRecord.from_dict(summary)
 

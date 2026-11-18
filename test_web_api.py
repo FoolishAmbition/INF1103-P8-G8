@@ -1,5 +1,6 @@
 """Integration tests for EventWise Flask web routes and IOManager."""
 
+from datetime import datetime
 import unittest
 from unittest.mock import patch
 
@@ -105,6 +106,64 @@ class TestWebAPI(unittest.TestCase):
             self.assertEqual(data["event"]["recommendation"], "ATTEND")
             self.assertEqual(data["event"]["priority"], "High")
             self.assertEqual(len(data["events"]), 1)
+
+    def test_analyse_event_persists_travel_snapshot(self):
+        from src.travel_result import TravelResult
+        from src.geolocation_service import GeoLocationService
+        tz = GeoLocationService.SINGAPORE_TIMEZONE
+
+        self.client.post(
+            "/api/profile",
+            json={"field_of_study": "Computing", "interests": ["DevOps"], "home_postal_code": "123456"},
+        )
+        mock_ai_result = {
+            "event_category": "Workshop",
+            "ai_scores": AIScores(4, 4, 4),
+            "ai_reasoning": "Great workshop.",
+        }
+        mock_travel = TravelResult(
+            status="AVAILABLE",
+            feasibility="WITHIN_LIMIT",
+            distance_km=6.2,
+            duration_minutes=30.0,
+            recommended_departure=datetime(2026, 12, 1, 9, 0, tzinfo=tz),
+            estimated_arrival=datetime(2026, 12, 1, 9, 30, tzinfo=tz),
+            legs=[{"mode": "BUS", "distance_km": 6.2, "duration_minutes": 30.0}],
+        )
+
+        with patch.object(self.ew._ai_manager, "analyze_event", return_value=(mock_ai_result, None)), \
+             patch.object(self.ew._logic_manager, "assess_travel", return_value=mock_travel):
+            response = self.client.post(
+                "/api/analyse",
+                json={
+                    "event_name": "Cloud Seminar",
+                    "event_description": "Cloud architectures",
+                    "workload": "Low",
+                    "travel": {
+                        "origin_choice": "home",
+                        "destination_postal_code": "654321",
+                        "event_start": "2026-12-01T10:00",
+                    },
+                },
+            )
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            # Saved event entity must contain the travel snapshot without legs
+            event = data["event"]
+            self.assertEqual(event["destination_postal_code"], "654321")
+            self.assertIsNotNone(event["travel_snapshot"])
+            self.assertEqual(event["travel_snapshot"]["status"], "AVAILABLE")
+            self.assertEqual(event["travel_snapshot"]["duration_minutes"], 30.0)
+            self.assertIsNone(event["travel_snapshot"]["legs"])  # privacy-safe: legs stripped from storage
+
+            # Live travel returned to browser preserves legs for interactive map
+            self.assertIsNotNone(data["travel"]["legs"])
+
+            # Verify persisted state via GET /api/state
+            state_data = self.client.get("/api/state").get_json()
+            saved_event = state_data["events"][-1]
+            self.assertEqual(saved_event["destination_postal_code"], "654321")
+            self.assertEqual(saved_event["travel_snapshot"]["status"], "AVAILABLE")
 
     def test_events_filtering_and_analytics_endpoints(self):
         # Populate an event
