@@ -1,3 +1,14 @@
+"""
+test_audit_remediation.py - Error Handling & Quality Audit Tests.
+
+PURPOSE:
+Validates core rubric-mandated resilience and software quality criteria:
+- Error Handling: Translates third-party API/network errors into domain exceptions (APIError).
+- Data Resilience: Handles missing/corrupt storage files and tests MongoDB-to-JSON fallback.
+- Encapsulation: Verifies entity and assessment properties are read-only and immutable.
+- Timezone & Privacy: Verifies UTC normalization and ensures student postal codes never leak to AI prompts.
+"""
+
 import json
 import unittest
 from datetime import datetime, timedelta

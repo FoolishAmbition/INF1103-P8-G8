@@ -1,4 +1,13 @@
-"""Unit tests for the new features: EventFilter and AnalyticsReporter."""
+"""
+test_features.py - Query Filtering & Analytics Aggregation Tests.
+
+PURPOSE:
+Validates backend data analysis and query engines used by DataManager:
+- EventFilter: Keyword search, recommendation status filtering (ATTEND/MAYBE/SKIP),
+  minimum score thresholds, and combined multi-criteria filters.
+- AnalyticsReporter: Aggregated metrics calculation, including recommended attendance rate,
+  category distribution percentages, workload-vs-recommendation matrix, and score averages.
+"""
 
 import unittest
 

@@ -1,4 +1,18 @@
-"""Unit tests for business rules, RuleEngine, ScoringStrategy, and LogicManager."""
+"""
+test_rules_and_scoring.py - Business Rules, RuleEngine & Scoring Strategy Tests.
+
+PURPOSE:
+Validates polymorphic decision-making and scoring logic (Open/Closed Principle):
+- Polymorphic Business Rules: Verifies all 6 rules evaluate in strict priority order:
+    1. TopScoresRule (ATTEND)
+    2. HighValueLowWorkloadRule (ATTEND)
+    3. HighValueHighWorkloadRule (MAYBE)
+    4. MidValueLowWorkloadRule (MAYBE)
+    5. MidValueHighWorkloadRule (SKIP)
+    6. LowValueRule (SKIP)
+- ScoringStrategy: Sums AI criteria scores and assigns priority bands (High: 11-15, Medium: 7-10, Low: 3-6).
+- LogicManager: Coordinates rule evaluation, reason generation, and EventRecord creation.
+"""
 
 import unittest
 

@@ -1,4 +1,13 @@
-"""Integration tests for EventWise Flask web routes and IOManager."""
+"""
+test_web_api.py - Flask Web Routes & IOManager Integration Tests.
+
+PURPOSE:
+Validates the web presentation layer, route handling, and manager orchestration:
+- Flask Endpoints: GET /, GET /api/state, POST /api/profile, POST /api/analyse, GET /api/events, GET /api/analytics.
+- IOManager Validation: Validates incoming profile payloads, event inputs, and query parameters.
+- Orchestration Workflow: Verifies EventWise coordinates IOManager, AIManager, LogicManager, and DataManager.
+- Privacy Boundary: Verifies live transit responses preserve map legs while storage snapshots strip them.
+"""
 
 from datetime import datetime
 import unittest

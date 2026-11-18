@@ -1,4 +1,13 @@
-"""Unit tests for domain entity models: Entity, StudentProfile, AIScores, EventRecord."""
+"""
+test_models.py - Domain Entity Models & Encapsulation Tests.
+
+PURPOSE:
+Validates the core Object-Oriented domain models and data integrity:
+- StudentProfile: Interest management, field of study, postal code validation, and empty checks.
+- AIScores: Strict boundary validation for criteria [1, 5] and total score [3, 15].
+- EventRecord: Full event encapsulation (workload, priority, scores, timestamp normalization).
+- Entity Serialization: Complete round-trip conversion (to_dict / from_dict) for database persistence.
+"""
 
 import unittest
 from datetime import datetime, timezone

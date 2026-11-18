@@ -1,4 +1,13 @@
-"""Offline unit tests for geolocation service, journey evaluation, and travel results."""
+"""
+test_geolocation.py - Geolocation, Transit Routing & Schedule Tests.
+
+PURPOSE:
+Validates public-transport routing and scheduling without needing live network calls:
+- Postal Code Validation: Enforces Singapore 6-digit postal code format before network requests.
+- JourneyPlanner: Calculates recommended departure time including the 15-minute early-arrival buffer.
+- Feasibility Assessment: Flags journeys exceeding preferred limits (WITHIN_LIMIT vs LONG_JOURNEY).
+- TravelResult Model: Safe parsing of OneMap transit responses (bus/MRT/walk legs, warning codes).
+"""
 
 import unittest
 from datetime import datetime, timedelta

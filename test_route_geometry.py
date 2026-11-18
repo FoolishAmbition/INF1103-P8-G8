@@ -1,4 +1,12 @@
-"""Offline geometry checks with synthetic coordinates, never personal locations."""
+"""
+test_route_geometry.py - Transit Route Polyline Decoder Tests.
+
+PURPOSE:
+Validates the geometric decoding of OneMap transit paths into coordinates for Leaflet maps:
+- Polyline Decoding: Decodes encoded string coordinates into latitude/longitude coordinate pairs.
+- Spatial Boundaries: Ensures decoded coordinates fall strictly within Singapore geographic bounds.
+- Safety & Resilience: Handles malformed, empty, or out-of-region geometry strings gracefully.
+"""
 
 import unittest
 
