@@ -54,6 +54,7 @@ function showResult(raw) {
 }
 // Handled by backend EventFilter integration; defined with active filter controls below.
 let renderHistory = async () => {};
+let renderAnalytics = async () => {};
 async function api(path, method = "GET", data) {
     const response = await fetch(path, {
         method,
@@ -65,15 +66,26 @@ async function api(path, method = "GET", data) {
     return result;
 }
 function selectTab(which) {
-    ["history", "profile"].forEach((tab) => {
+    ["history", "profile", "analytics"].forEach((tab) => {
         const active = tab === which;
-        $("tab-" + tab).classList.toggle("selected", active);
-        $("tab-" + tab).setAttribute("aria-selected", String(active));
-        $(tab + "-panel").hidden = !active;
+        const btn = $("tab-" + tab);
+        const panel = $(tab + "-panel");
+        if (btn) {
+            btn.classList.toggle("selected", active);
+            btn.setAttribute("aria-selected", String(active));
+        }
+        if (panel) {
+            panel.hidden = !active;
+        }
     });
+    if (which === "analytics") {
+        renderAnalytics();
+    }
+    if (typeof syncPanelHeights === "function") syncPanelHeights();
 }
 $("tab-history").addEventListener("click", () => selectTab("history"));
 $("tab-profile").addEventListener("click", () => selectTab("profile"));
+$("tab-analytics").addEventListener("click", () => selectTab("analytics"));
 $("history-search").addEventListener("input", renderHistory);
 
 $("event-form").addEventListener("submit", async (e) => {
@@ -151,75 +163,14 @@ async function loadState() {
 }
 loadState();
 
-// filtering, event details annd analytics
+// filtering, event details and analytics
 (() => {
     "use strict";
 
     const byId = (id) => document.getElementById(id);
-    const historyPanel = byId("history-panel");
-    const profilePanel = byId("profile-panel");
-    const tabBar = document.querySelector(".tab-bar");
-    const rightPanel = document.querySelector(".right-panel");
-    if (!historyPanel || !profilePanel || !tabBar || !rightPanel) return;
+    const overlay = byId("ew-detail-overlay");
+    if (!overlay) return;
 
-    // Additional filter controls, alongside the existing keyword search.
-    const filters = document.createElement("div");
-    filters.className = "ew-filter-row";
-    filters.innerHTML = `
-    <label class="ew-filter-field" for="ew-recommendation-filter">
-      Recommendation
-      <select id="ew-recommendation-filter">
-        <option value="ALL">All recommendations</option>
-        <option value="ATTEND">ATTEND</option>
-        <option value="MAYBE">MAYBE</option>
-        <option value="SKIP">SKIP</option>
-      </select>
-    </label>
-    <label class="ew-filter-field" for="ew-min-score">
-      Minimum score (out of 15)
-      <input id="ew-min-score" type="number" min="0" max="15" step="1" value="0">
-    </label>
-    <button id="ew-clear-filters" class="ew-clear-button" type="button">Clear filters</button>`;
-    byId("history-search").insertAdjacentElement("afterend", filters);
-
-    // Third tab, next to existing History and Profile tabs.
-    const analyticsTab = document.createElement("button");
-    analyticsTab.type = "button";
-    analyticsTab.id = "tab-analytics";
-    analyticsTab.className = "tab";
-    analyticsTab.setAttribute("role", "tab");
-    analyticsTab.setAttribute("aria-selected", "false");
-    analyticsTab.setAttribute("aria-controls", "analytics-panel");
-    analyticsTab.textContent = "▤ Analytics";
-    tabBar.append(analyticsTab);
-
-    const analyticsPanel = document.createElement("section");
-    analyticsPanel.id = "analytics-panel";
-    analyticsPanel.hidden = true;
-    analyticsPanel.setAttribute("role", "tabpanel");
-    analyticsPanel.setAttribute("aria-labelledby", "tab-analytics");
-    analyticsPanel.innerHTML = `
-    <div class="section-heading"><div><span class="eyebrow">YOUR EVENTS AT A GLANCE</span>
-      <h2>Event analytics</h2></div></div>
-    <div id="ew-analytics-content" aria-live="polite"></div>`;
-    rightPanel.insertBefore(
-        analyticsPanel,
-        rightPanel.querySelector(".panel-footer"),
-    );
-
-    // A reusable detail dialog. All event data is written as text, never HTML.
-    const overlay = document.createElement("div");
-    overlay.id = "ew-detail-overlay";
-    overlay.className = "ew-overlay";
-    overlay.hidden = true;
-    overlay.innerHTML = `
-    <div class="ew-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="ew-detail-title" tabindex="-1">
-      <div class="ew-detail-top"><span class="eyebrow">ANALYSED EVENT</span>
-        <button id="ew-detail-close" type="button" aria-label="Close event details">✕</button></div>
-      <h2 id="ew-detail-title"></h2>
-      <div id="ew-detail-body"></div>
-    </div>`;
-    document.body.append(overlay);
     let previousFocus = null;
     const closeDetails = () => {
         overlay.hidden = true;
@@ -414,7 +365,7 @@ loadState();
 
     // Analytics metric aggregation is owned by backend AnalyticsReporter via GET /api/analytics.
     // renderAnalytics fetches pre-computed statistics and renders the UI components.
-    async function renderAnalytics() {
+    renderAnalytics = async function () {
         const root = byId("ew-analytics-content");
         if (!root) return;
 
@@ -545,34 +496,9 @@ loadState();
         }
     }
 
-    // Keep the existing two tabs working, and add a third without changing original JS.
-    const originalSelectTab = selectTab;
-    selectTab = function (which) {
-        if (which === "analytics") {
-            historyPanel.hidden = true;
-            profilePanel.hidden = true;
-            analyticsPanel.hidden = false;
-            ["history", "profile"].forEach((name) => {
-                const tab = byId(`tab-${name}`);
-                tab.classList.remove("selected");
-                tab.setAttribute("aria-selected", "false");
-            });
-            analyticsTab.classList.add("selected");
-            analyticsTab.setAttribute("aria-selected", "true");
-            renderAnalytics();
-        } else {
-            originalSelectTab(which);
-            analyticsPanel.hidden = true;
-            analyticsTab.classList.remove("selected");
-            analyticsTab.setAttribute("aria-selected", "false");
-        }
-        if (typeof syncPanelHeights === "function") syncPanelHeights();
-    };
-    analyticsTab.addEventListener("click", () => selectTab("analytics"));
-
-    byId("ew-recommendation-filter").addEventListener("change", renderHistory);
-    byId("ew-min-score").addEventListener("input", renderHistory);
-    byId("ew-clear-filters").addEventListener("click", () => {
+    byId("ew-recommendation-filter")?.addEventListener("change", renderHistory);
+    byId("ew-min-score")?.addEventListener("input", renderHistory);
+    byId("ew-clear-filters")?.addEventListener("click", () => {
         byId("history-search").value = "";
         byId("ew-recommendation-filter").value = "ALL";
         byId("ew-min-score").value = "0";

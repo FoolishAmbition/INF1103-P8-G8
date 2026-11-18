@@ -61,9 +61,37 @@
         <p id="form-message" class="message" role="status" aria-live="polite"></p>
       </section>
       <section class="panel right-panel" aria-label="History and profile">
-        <div class="tab-bar" role="tablist" aria-label="Right panel"><button class="tab selected" id="tab-history" type="button" role="tab" aria-selected="true" aria-controls="history-panel">✦ Event history</button><button class="tab" id="tab-profile" type="button" role="tab" aria-selected="false" aria-controls="profile-panel">♙ My profile</button></div>
-        <div id="history-panel" role="tabpanel" aria-labelledby="tab-history"><div class="section-heading"><div><span class="eyebrow">YOUR JOURNEY SO FAR</span><h2>Past discoveries <span>✿</span></h2></div><span id="event-count" class="count-pill">0 events</span></div><input id="history-search" type="search" placeholder="⌕  Search your events..."><div id="history-list" class="history-list"><div class="empty-history">Your analysed events will appear here.<br>Start with an event on the left! </div></div></div>
+        <div class="tab-bar" role="tablist" aria-label="Right panel">
+          <button class="tab selected" id="tab-history" type="button" role="tab" aria-selected="true" aria-controls="history-panel">✦ Event history</button>
+          <button class="tab" id="tab-profile" type="button" role="tab" aria-selected="false" aria-controls="profile-panel">♙ My profile</button>
+          <button class="tab" id="tab-analytics" type="button" role="tab" aria-selected="false" aria-controls="analytics-panel">▤ Analytics</button>
+        </div>
+        <div id="history-panel" role="tabpanel" aria-labelledby="tab-history">
+          <div class="section-heading"><div><span class="eyebrow">YOUR JOURNEY SO FAR</span><h2>Past discoveries <span>✿</span></h2></div><span id="event-count" class="count-pill">0 events</span></div>
+          <input id="history-search" type="search" placeholder="⌕  Search your events...">
+          <div class="ew-filter-row">
+            <label class="ew-filter-field" for="ew-recommendation-filter">
+              Recommendation
+              <select id="ew-recommendation-filter">
+                <option value="ALL">All recommendations</option>
+                <option value="ATTEND">ATTEND</option>
+                <option value="MAYBE">MAYBE</option>
+                <option value="SKIP">SKIP</option>
+              </select>
+            </label>
+            <label class="ew-filter-field" for="ew-min-score">
+              Minimum score (out of 15)
+              <input id="ew-min-score" type="number" min="0" max="15" step="1" value="0">
+            </label>
+            <button id="ew-clear-filters" class="ew-clear-button" type="button">Clear filters</button>
+          </div>
+          <div id="history-list" class="history-list"><div class="empty-history">Your analysed events will appear here.<br>Start with an event on the left! </div></div>
+        </div>
         <div id="profile-panel" role="tabpanel" aria-labelledby="tab-profile" hidden><div class="section-heading"><div><span class="eyebrow">A LITTLE ABOUT YOU</span><h2>My profile <span>✿</span></h2></div></div><p class="profile-intro">Help EventWise understand your interests so recommendations feel more like you.</p><form id="profile-form"><label for="study-field">Field of study</label><input id="study-field" placeholder="e.g. Software Engineering" required><label for="interests">Your interests</label><textarea id="interests" rows="4" placeholder="AI, Design, Programming, Business..."></textarea><small class="hint">Separate interests with commas.</small><label for="home-postal-code">Home postal code <span class="geo-optional">(optional)</span></label><input id="home-postal-code" name="home_postal_code" type="text" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="6-digit Singapore postal code" autocomplete="off"><small class="hint">Used only if you choose “My saved home postal code” for travel planning.</small><button class="action-button profile-button" type="submit">Save my profile <span>↗</span></button></form><p id="profile-message" class="message" role="status" aria-live="polite"></p></div>
+        <section id="analytics-panel" role="tabpanel" aria-labelledby="tab-analytics" hidden>
+          <div class="section-heading"><div><span class="eyebrow">YOUR EVENTS AT A GLANCE</span><h2>Event analytics</h2></div></div>
+          <div id="ew-analytics-content" aria-live="polite"></div>
+        </section>
         <div class="panel-footer"><span class="frog" aria-hidden="true">☘</span></div>
       </section>
     </div>
@@ -82,5 +110,13 @@
     </section>
     <div class="bottom-caption">✳ Built for curious students · Powered by EventWise AI ✳</div>
   </main>
+  <div id="ew-detail-overlay" class="ew-overlay" hidden>
+    <div class="ew-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="ew-detail-title" tabindex="-1">
+      <div class="ew-detail-top"><span class="eyebrow">ANALYSED EVENT</span>
+        <button id="ew-detail-close" type="button" aria-label="Close event details">✕</button></div>
+      <h2 id="ew-detail-title"></h2>
+      <div id="ew-detail-body"></div>
+    </div>
+  </div>
 </body>
 </html>
