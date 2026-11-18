@@ -64,6 +64,20 @@ class TestJourneyPlannerEvaluation(unittest.TestCase):
         assessment = self.planner.evaluate(self.event_start, route)
         self.assertEqual(assessment.feasibility, "LONG_JOURNEY")
 
+    def test_journey_planner_preserves_legs(self):
+        tz = GeoLocationService.SINGAPORE_TIMEZONE
+        legs = [{"mode": "SUBWAY", "distance_km": 5.0, "duration_minutes": 12.0}]
+        route = TravelResult(
+            distance_km=5.0,
+            duration_minutes=12.0,
+            departure_time=datetime(2026, 12, 1, 9, 30, tzinfo=tz),
+            estimated_arrival=datetime(2026, 12, 1, 9, 42, tzinfo=tz),
+            legs=legs,
+        )
+        assessment = self.planner.evaluate(datetime(2026, 12, 1, 10, 0, tzinfo=tz), route)
+        self.assertEqual(assessment.legs, legs)
+        self.assertIsNot(assessment.legs, legs)
+
     def test_evaluate_none_route_returns_unavailable(self):
         assessment = self.planner.evaluate(self.event_start, route=None)
         self.assertEqual(assessment.status, "UNAVAILABLE")
@@ -104,6 +118,90 @@ class TestTravelResult(unittest.TestCase):
         self.assertEqual(result["status"], "UNAVAILABLE")
         self.assertEqual(result["error_code"], "TIMEOUT")
         self.assertIn("too long", result["error_message"].lower())
+
+    def test_travel_result_with_legs_and_geometry(self):
+        tz = GeoLocationService.SINGAPORE_TIMEZONE
+        legs = [
+            {
+                "mode": "WALK",
+                "distance_km": 0.5,
+                "duration_minutes": 6.0,
+                "route": None,
+                "from_name": "Home",
+                "to_name": "Bus Stop A",
+                "geometry_points": "_||F_mpxRgEoKgEfE",
+            },
+            {
+                "mode": "BUS",
+                "distance_km": 3.0,
+                "duration_minutes": 15.0,
+                "route": "147",
+                "from_name": "Bus Stop A",
+                "to_name": "Campus",
+                "geometry_points": None,
+            },
+        ]
+        assessment = TravelResult(
+            status="AVAILABLE",
+            feasibility="WITHIN_LIMIT",
+            arrival_buffer_minutes=15,
+            duration_minutes=21.0,
+            distance_km=3.5,
+            recommended_departure=datetime(2026, 12, 1, 9, 20, tzinfo=tz),
+            estimated_arrival=datetime(2026, 12, 1, 9, 45, tzinfo=tz),
+            event_start=datetime(2026, 12, 1, 10, 0, tzinfo=tz),
+            legs=legs,
+        )
+        d = assessment.to_dict()
+        self.assertEqual(d["status"], "AVAILABLE")
+        self.assertEqual(len(d["legs"]), 2)
+        self.assertEqual(d["legs"][0]["mode"], "WALK")
+        self.assertEqual(d["legs"][0]["route"], None)
+        self.assertEqual(d["legs"][0]["from_name"], "Home")
+        self.assertIsInstance(d["legs"][0]["geometry"], list)
+        self.assertGreater(len(d["legs"][0]["geometry"]), 0)
+        self.assertEqual(d["legs"][1]["mode"], "BUS")
+        self.assertEqual(d["legs"][1]["route"], "147")
+        self.assertIsNone(d["legs"][1]["geometry"])
+
+    def test_from_onemap_response_with_legs(self):
+        response = {
+            "plan": {
+                "itineraries": [
+                    {
+                        "duration": 1800,
+                        "startTime": 1700000000000,
+                        "endTime": 1700001800000,
+                        "legs": [
+                            {
+                                "mode": "WALK",
+                                "duration": 300,
+                                "distance": 250,
+                                "from": {"name": "Origin"},
+                                "to": {"name": "Bus Stop"},
+                                "legGeometry": {"points": "_p~iF~ps|U_ulLnnqC_mqNvxq`@"},
+                            },
+                            {
+                                "mode": "BUS",
+                                "duration": 1500,
+                                "distance": 5000,
+                                "route": "10",
+                                "from": {"name": "Bus Stop"},
+                                "to": {"name": "Destination"},
+                            },
+                        ],
+                    }
+                ]
+            }
+        }
+        res = TravelResult.from_onemap_response(response)
+        self.assertEqual(res.duration_minutes, 30.0)
+        self.assertEqual(res.distance_km, 5.25)
+        self.assertEqual(len(res.legs), 2)
+        self.assertEqual(res.legs[0]["mode"], "WALK")
+        self.assertEqual(res.legs[0]["geometry_points"], "_p~iF~ps|U_ulLnnqC_mqNvxq`@")
+        self.assertEqual(res.legs[1]["mode"], "BUS")
+        self.assertEqual(res.legs[1]["route"], "10")
 
 
 class TestGeoLocationServiceOffline(unittest.TestCase):

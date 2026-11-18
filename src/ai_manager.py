@@ -72,6 +72,7 @@ class AIManager(BaseManager):
             data = json.loads(text)
         except json.JSONDecodeError as exc:
             raise ResponseValidationError(f"Non-JSON response: {exc}") from exc
+
         if not self.validate_schema(data):
             raise ResponseValidationError("AI response failed schema validation.")
         ai_scores = AIScores.from_dict(data)

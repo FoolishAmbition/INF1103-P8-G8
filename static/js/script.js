@@ -1,5 +1,6 @@
 const $ = (id) => document.getElementById(id);
 let savedEvents = [];
+let savedHomePostalCode = '';
 
 function setMessage(id, text, isError = false) {
   $(id).textContent = text;
@@ -71,11 +72,17 @@ $('event-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const button = $('analyse-button');
   button.disabled = true;
+  $('result-data').hidden = true;
+  $('result-empty').hidden = false;
+  $('result-label').textContent = 'ANALYSING';
+  renderTravelEstimate(null);
   setMessage('form-message', 'Analysing your event...');
   try {
     const result = await api('/api/analyse', 'POST', {
       event_name: $('event-name').value.trim(),
       event_description: $('event-description').value.trim(),
+      venue_name: $('venue-name').value.trim(),
+      venue_address: $('venue-address').value.trim(),
       workload: document.querySelector('input[name="workload"]:checked').value,
       travel: collectTravelInputs()
     });
@@ -86,7 +93,13 @@ $('event-form').addEventListener('submit', async (e) => {
     setMessage('form-message', '✓ Recommendation generated and saved!');
     $('event-form').reset();
     updateGeoVisibility();
-  } catch (err) { setMessage('form-message', err.message, true); }
+  } catch (err) {
+    $('result-data').hidden = true;
+    $('result-empty').hidden = false;
+    $('result-label').textContent = 'ANALYSIS FAILED';
+    renderTravelEstimate(null);
+    setMessage('form-message', err.message, true);
+  }
   finally { button.disabled = false; }
 });
 
@@ -94,11 +107,14 @@ $('profile-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   setMessage('profile-message', 'Saving profile...');
   try {
-    await api('/api/profile', 'POST', {
+    const result = await api('/api/profile', 'POST', {
       field_of_study: $('study-field').value.trim(),
       interests: $('interests').value.split(',').map(s => s.trim()).filter(Boolean),
       home_postal_code: $('home-postal-code').value.trim()
     });
+    savedHomePostalCode = result.profile.home_postal_code || '';
+    $('home-postal-code').value = savedHomePostalCode;
+    updateGeoVisibility();
     setMessage('profile-message', '✓ Profile saved!');
   } catch (err) { setMessage('profile-message', err.message, true); }
 });
@@ -109,7 +125,8 @@ async function loadState() {
     const profile = state.profile || {};
     $('study-field').value = profile.field_of_study || '';
     $('interests').value = Array.isArray(profile.interests) ? profile.interests.join(', ') : '';
-    $('home-postal-code').value = profile.home_postal_code || '';
+    savedHomePostalCode = profile.home_postal_code || '';
+    $('home-postal-code').value = savedHomePostalCode;
     updateGeoVisibility();
     savedEvents = state.events || [];
     renderHistory();
@@ -233,6 +250,9 @@ loadState();
     container.append(scoreLine);
 
     addText(container, 'Description', e.description);
+    addText(container, 'Venue', raw.venue_name);
+    addText(container, 'Address', raw.venue_address);
+    addText(container, 'Destination postal code', raw.destination_postal_code);
     addText(container, 'Category', raw.event_category ?? raw.category);
     addText(container, 'Workload', raw.workload);
     addText(container, 'Priority', raw.priority ?? raw.event_priority);
@@ -241,12 +261,14 @@ loadState();
     addText(container, 'Networking value', e.networking === null ? 'Not available' : `${e.networking}/5`);
     addText(container, 'Recommendation reason', e.reason);
     addText(container, 'AI reasoning', e.aiReasoning);
-    if (raw.travel && raw.travel.status === 'AVAILABLE') {
-      addText(container, 'Public transport distance', formatGeoNumber(raw.travel.distance_km, 'km'));
-      addText(container, 'Travel duration', formatGeoNumber(raw.travel.duration_minutes, 'minutes'));
-      addText(container, 'Recommended departure', formatGeoDate(raw.travel.recommended_departure));
-      addText(container, 'Estimated arrival', formatGeoDate(raw.travel.estimated_arrival));
-    }
+    const journey = document.createElement('section');
+    journey.className = 'geo-travel-result';
+    const journeyHeading = document.createElement('h3');
+    journeyHeading.textContent = 'Estimate when analysed';
+    const journeyContent = document.createElement('div');
+    renderTravelContent(journeyContent, raw.travel_snapshot, true);
+    journey.append(journeyHeading, journeyContent);
+    container.append(journey);
 
     overlay.hidden = false;
     document.body.classList.add('ew-dialog-open');
@@ -320,6 +342,13 @@ loadState();
           details.addEventListener('click', () => openDetails(raw));
           bottom.append(badge, details);
           card.append(top, desc, bottom);
+          const venueDetails = [raw.venue_name, raw.venue_address, raw.destination_postal_code].filter(Boolean);
+          if (venueDetails.length) {
+            const venue = document.createElement('p');
+            venue.className = 'geo-history-venue';
+            venue.textContent = venueDetails.join(' · ');
+            card.insertBefore(venue, bottom);
+          }
           list.append(card);
         }
       }
@@ -480,17 +509,20 @@ loadState();
 
 /* new geolocation fields */
 function updateGeoVisibility() {
-  const choice = $('geo-origin-choice').value;
+  const originChoice = $('geo-origin-choice');
+  const hasSavedHome = /^[0-9]{6}$/.test(savedHomePostalCode);
+  originChoice.querySelector('option[value="home"]').disabled = !hasSavedHome;
+  if (originChoice.value === 'home' && !hasSavedHome) {
+    originChoice.value = 'skip';
+  }
+  const choice = originChoice.value;
   const enabled = choice !== 'skip';
   $('geo-fields').hidden = !enabled;
   $('geo-alternate-field').hidden = choice !== 'alternate';
-  const home = $('home-postal-code').value.trim();
   const hint = $('geo-home-message');
   hint.hidden = choice !== 'home';
   if (choice === 'home') {
-    hint.textContent = /^[0-9]{6}$/.test(home)
-      ? `Using your saved home postal code: ${home}`
-      : 'Set a 6-digit home postal code in My Profile and save it first.';
+    hint.textContent = `Using your saved home postal code: ${savedHomePostalCode}`;
   }
   $('geo-origin-postal').required = choice === 'alternate';
   $('geo-destination-postal').required = enabled;
@@ -498,7 +530,6 @@ function updateGeoVisibility() {
   if (typeof syncPanelHeights === 'function') syncPanelHeights();
 }
 $('geo-origin-choice').addEventListener('change', updateGeoVisibility);
-$('home-postal-code').addEventListener('input', updateGeoVisibility);
 updateGeoVisibility();
 
 function collectTravelInputs() {
@@ -507,7 +538,7 @@ function collectTravelInputs() {
   const postal = $('geo-destination-postal').value.trim();
   const start = $('geo-event-start').value;
   const origin = $('geo-origin-postal').value.trim();
-  if (choice === 'home' && !/^[0-9]{6}$/.test($('home-postal-code').value.trim())) {
+  if (choice === 'home' && !/^[0-9]{6}$/.test(savedHomePostalCode)) {
     throw new Error('Save a 6-digit home postal code in My Profile, or choose another starting point.');
   }
   if (choice === 'alternate' && !/^[0-9]{6}$/.test(origin)) {
@@ -544,12 +575,25 @@ function formatGeoDate(value) {
 function renderTravelEstimate(travel) {
   const section = $('geo-travel-result');
   const content = $('geo-travel-content');
+  section.hidden = !travel || travel.status === 'SKIPPED';
+  $('geo-steps-content').replaceChildren();
+  renderTravelContent(content, travel);
+  if (typeof EventWiseMap !== 'undefined') EventWiseMap.render(travel, selectJourneyStep);
+}
+
+function renderTravelContent(content, travel, historical = false) {
   content.replaceChildren();
   if (!travel || travel.status === 'SKIPPED') {
-    section.hidden = true;
+    if (historical) {
+      const message = document.createElement('p');
+      message.className = 'geo-hint';
+      message.textContent = travel
+        ? 'Travel planning was skipped for this event.'
+        : 'Travel details were not saved for this event.';
+      content.append(message);
+    }
     return;
   }
-  section.hidden = false;
   const add = (name, value) => {
     const line = document.createElement('div');
     line.className = 'geo-result-line';
@@ -567,13 +611,40 @@ function renderTravelEstimate(travel) {
     content.append(message);
     return;
   }
+  if (!historical) {
+    renderCurrentJourney(content, travel);
+    return;
+  }
+  const timeCards = document.createElement('div');
+  timeCards.className = 'geo-time-cards';
+  for (const [labelText, value] of [
+    ['Suggested leave-by', travel.recommended_departure],
+    ['Estimated arrival', travel.estimated_arrival]
+  ]) {
+    const card = document.createElement('div');
+    card.className = 'geo-time-card';
+    const label = document.createElement('span');
+    label.textContent = labelText;
+    const time = document.createElement('strong');
+    time.textContent = formatGeoDate(value);
+    card.append(label, time);
+    timeCards.append(card);
+  }
+  content.append(timeCards);
+  const note = document.createElement('p');
+  note.className = 'geo-hint';
+  note.textContent = historical
+    ? 'Saved estimate in Singapore time. Transit schedules may have changed.'
+    : 'Estimated times use Singapore time (UTC+08:00).';
+  content.append(note);
   add('Travel mode', 'Public transport (OneMap)');
   add('Distance', formatGeoNumber(travel.distance_km, 'km'));
   add('Duration', formatGeoNumber(travel.duration_minutes, 'min'));
-  add('Recommended departure', formatGeoDate(travel.recommended_departure));
-  add('Estimated arrival', formatGeoDate(travel.estimated_arrival));
   if (travel.arrival_buffer_minutes !== null) {
     add('Arrival buffer', formatGeoNumber(travel.arrival_buffer_minutes, 'min'));
+  }
+  if (travel.preferred_travel_limit_minutes != null) {
+    add('Preferred travel limit', formatGeoNumber(travel.preferred_travel_limit_minutes, 'min'));
   }
   if (travel.feasibility === 'LONG_JOURNEY') {
     const warning = document.createElement('p');
@@ -616,3 +687,107 @@ if (typeof ResizeObserver !== 'undefined') {
 }
 window.addEventListener('resize', syncPanelHeights);
 syncPanelHeights();
+
+function journeyModeLabel(leg) {
+  const labels = {WALK: 'Walk', BUS: 'Bus', SUBWAY: 'MRT', RAIL: 'Rail', TRAM: 'Tram', FERRY: 'Ferry'};
+  return (labels[leg.mode] || 'Travel') + (leg.route && leg.mode !== 'WALK' ? ` ${leg.route}` : '');
+}
+function journeyMinutes(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return 'Time unavailable';
+  if (value > 0 && value < 1) return 'Under 1 min';
+  const minutes = Math.round(value);
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60);
+    const remainder = minutes % 60;
+    return `About ${hours} hr${remainder ? ` ${remainder} min` : ''}`;
+  }
+  return `About ${minutes} min`;
+}
+function selectJourneyStep(index) {
+  document.querySelectorAll('[data-journey-step]').forEach(button => {
+    const selected = Number(button.dataset.journeyStep) === index;
+    button.classList.toggle('is-selected', selected);
+    button.setAttribute('aria-pressed', String(selected));
+    if (selected && button.classList.contains('geo-step-button')) {
+      const list = button.closest('ol');
+      if (list && list.scrollHeight > list.clientHeight) {
+        list.scrollTo({top: Math.max(0, button.offsetTop - 8), behavior: 'smooth'});
+      }
+    }
+  });
+}
+function renderCurrentJourney(content, travel) {
+  const summary = document.createElement('div');
+  summary.className = 'geo-summary';
+  for (const [label, value] of [
+    ['Leave by', formatGeoDate(travel.recommended_departure)],
+    ['Estimated arrival', formatGeoDate(travel.estimated_arrival)],
+    ['Total journey', journeyMinutes(travel.duration_minutes)]
+  ]) {
+    const card = document.createElement('div');
+    const title = document.createElement('span'); title.textContent = label;
+    const strong = document.createElement('strong'); strong.textContent = value;
+    card.append(title, strong); summary.append(card);
+  }
+  content.append(summary);
+  const warnings = Array.isArray(travel.warning_codes) ? travel.warning_codes : [];
+  if (warnings.includes('EVENT_START_MISSED') || warnings.includes('BUFFER_MISSED')) {
+    const alert = document.createElement('p'); alert.className = 'geo-warning geo-alert';
+    alert.textContent = warnings.includes('EVENT_START_MISSED')
+      ? 'Arrival is estimated after the event starts.' : 'You may miss the early-arrival buffer.';
+    content.append(alert);
+  }
+  if (travel.feasibility === 'LONG_JOURNEY') {
+    const alert = document.createElement('p'); alert.className = 'geo-warning geo-alert';
+    alert.textContent = 'Long journey: above your preferred travel limit.';
+    content.append(alert);
+  }
+  const legs = Array.isArray(travel.legs) ? travel.legs : [];
+  const overview = document.createElement('div'); overview.className = 'geo-route-overview';
+  overview.setAttribute('aria-label', 'Journey at a glance');
+  const steps = document.createElement('ol'); steps.className = 'geo-step-list';
+  legs.forEach((leg, index) => {
+    if (!leg || typeof leg !== 'object') return;
+    const modeClass = ['WALK', 'BUS', 'SUBWAY', 'RAIL', 'TRAM', 'FERRY'].includes(leg.mode) ? leg.mode.toLowerCase() : 'other';
+    const choose = () => {
+      selectJourneyStep(index);
+      if (typeof EventWiseMap !== 'undefined') EventWiseMap.selectStep(index);
+    };
+    const chip = document.createElement('button'); chip.type = 'button';
+    chip.className = 'geo-route-chip geo-mode-' + modeClass;
+    chip.dataset.journeyStep = String(index); chip.setAttribute('aria-pressed', 'false');
+    chip.textContent = `${index + 1}. ${journeyModeLabel(leg)}`;
+    chip.addEventListener('click', choose); overview.append(chip);
+    const item = document.createElement('li');
+    const button = document.createElement('button'); button.type = 'button';
+    button.className = 'geo-step-button geo-mode-' + modeClass;
+    button.dataset.journeyStep = String(index); button.setAttribute('aria-pressed', 'false');
+    button.addEventListener('click', choose);
+    const number = document.createElement('span'); number.className = 'geo-step-number'; number.textContent = String(index + 1);
+    const detail = document.createElement('span'); detail.className = 'geo-step-detail';
+    const title = document.createElement('strong');
+    title.textContent = leg.mode === 'WALK' ? `Walk to ${leg.to_name || 'the next stop'}` : `Take ${journeyModeLabel(leg)}`;
+    const places = document.createElement('span');
+    places.textContent = `${leg.from_name || 'Start unavailable'} → ${leg.to_name || 'End unavailable'}`;
+    const measurements = document.createElement('small');
+    measurements.textContent = `${journeyMinutes(leg.duration_minutes)} · ${formatGeoNumber(leg.distance_km, 'km')}`;
+    detail.append(title, places, measurements); button.append(number, detail); item.append(button); steps.append(item);
+  });
+  content.append(overview);
+  const preferences = document.createElement('details'); preferences.className = 'geo-preferences';
+  const toggle = document.createElement('summary'); toggle.textContent = 'Estimate details';
+  const text = document.createElement('p'); text.className = 'geo-hint';
+  text.textContent = `Singapore time (UTC+08:00) · Distance: ${formatGeoNumber(travel.distance_km, 'km')} · Arrival buffer: ${formatGeoNumber(travel.arrival_buffer_minutes, 'min')} · Preferred limit: ${formatGeoNumber(travel.preferred_travel_limit_minutes, 'min')}. Times are estimates.`;
+  preferences.append(toggle, text); content.append(preferences);
+  const holder = $('geo-steps-content');
+  const heading = document.createElement('h4'); heading.textContent = 'Step-by-step directions'; holder.append(heading);
+  const help = document.createElement('p'); help.className = 'geo-hint';
+  help.textContent = 'Select a step to highlight it on the map. Select a numbered map marker to match it here.'; holder.append(help);
+  if (steps.children.length) holder.append(steps);
+  else {
+    const empty = document.createElement('p'); empty.className = 'geo-hint';
+    empty.textContent = 'Step-by-step details are unavailable for this estimate.'; holder.append(empty);
+  }
+  const privacy = document.createElement('p'); privacy.className = 'geo-hint';
+  privacy.textContent = 'Steps and the map are shown for this analysis only. History saves the summary.'; holder.append(privacy);
+}

@@ -1,10 +1,12 @@
 """Consolidated travel domain model, OneMap transit parser, and presentation serializer."""
 
 import math
+from copy import deepcopy
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from src.exceptions import ValidationError, GeoLocationError
+from src.route_geometry import decode_route_geometry
 
 
 class TravelResult:
@@ -45,6 +47,7 @@ class TravelResult:
         error_code=None,
         event_start=None,
         preferred_limit_minutes=None,
+        legs=None,
     ):
         # Support wrapping / copying an existing TravelResult or None (skipped)
         if len(args) == 1:
@@ -85,6 +88,7 @@ class TravelResult:
                     if preferred_limit_minutes is not None
                     else arg0.preferred_limit_minutes
                 )
+                legs = legs if legs is not None else getattr(arg0, "legs", None)
             elif isinstance(arg0, str):
                 status = arg0
             elif isinstance(arg0, (int, float)) and not isinstance(arg0, bool):
@@ -94,7 +98,7 @@ class TravelResult:
                 raise ValidationError("Invalid argument for TravelResult.")
         elif len(args) > 1:
             # Handle positional arguments from previous TransitRoute:
-            # (distance_km, duration_minutes, departure_time, estimated_arrival, [provider])
+            # (distance_km, duration_minutes, departure_time, estimated_arrival, [provider], [legs])
             if isinstance(args[0], (int, float)) and not isinstance(args[0], bool):
                 distance_km = float(args[0])
                 status = status or "AVAILABLE"
@@ -106,6 +110,8 @@ class TravelResult:
                     estimated_arrival = args[3]
                 if len(args) > 4:
                     provider = args[4]
+                if len(args) > 5:
+                    legs = args[5]
             # Handle positional arguments from previous TravelAssessment:
             # (status, feasibility, arrival_buffer_minutes, distance_km, ...)
             elif isinstance(args[0], str):
@@ -132,6 +138,8 @@ class TravelResult:
                     event_start = args[10]
                 if len(args) > 11:
                     preferred_limit_minutes = args[11]
+                if len(args) > 12:
+                    legs = args[12]
 
         self._status = status or "AVAILABLE"
         self._feasibility = feasibility
@@ -146,6 +154,7 @@ class TravelResult:
         self._error_code = error_code
         self._event_start = event_start
         self._preferred_limit_minutes = preferred_limit_minutes
+        self._legs = deepcopy(legs) if legs is not None else None
 
     @property
     def status(self):
@@ -199,6 +208,10 @@ class TravelResult:
     def preferred_limit_minutes(self):
         return self._preferred_limit_minutes
 
+    @property
+    def legs(self):
+        return self._legs
+
     def with_recommended_departure(self, departure):
         """Return a copy with the departure time used for the final route check."""
         return TravelResult(
@@ -215,6 +228,7 @@ class TravelResult:
             error_code=self.error_code,
             event_start=self.event_start,
             preferred_limit_minutes=self.preferred_limit_minutes,
+            legs=self.legs,
         )
 
     def __eq__(self, other):
@@ -290,6 +304,8 @@ class TravelResult:
                 "INVALID_RESPONSE", "OneMap returned invalid or incomplete data."
             ) from None
 
+        parsed_legs = [cls._parse_leg(leg) for leg in legs]
+
         return cls(
             status="AVAILABLE",
             distance_km=distance_meters / 1000,
@@ -297,7 +313,50 @@ class TravelResult:
             departure_time=departure,
             estimated_arrival=arrival,
             provider="OneMap",
+            legs=parsed_legs,
         )
+
+    @classmethod
+    def _parse_leg(cls, leg: dict) -> dict:
+        """Keep selected optional fields; bad detail must not discard a valid summary."""
+        if not isinstance(leg, dict):
+            return {}
+        mode = leg.get("mode")
+        if mode not in ("WALK", "BUS", "SUBWAY", "RAIL", "TRAM", "FERRY"):
+            mode = None
+        duration = leg.get("duration")
+        duration_minutes = None
+        if cls._is_valid_number(duration, min_val=0, allow_zero=True):
+            duration_minutes = duration / 60
+        geometry = leg.get("legGeometry")
+        points = None
+        if isinstance(geometry, dict):
+            candidate = geometry.get("points")
+            if isinstance(candidate, str) and candidate and all(63 <= ord(c) <= 126 for c in candidate):
+                points = candidate
+        distance = leg.get("distance", 0)
+        distance_km = distance / 1000 if cls._is_valid_number(distance, min_val=0, allow_zero=True) else 0.0
+        return {
+            "mode": mode,
+            "distance_km": distance_km,
+            "duration_minutes": duration_minutes,
+            "route": cls._optional_text(leg.get("route")),
+            "from_name": cls._place_name(leg.get("from")),
+            "to_name": cls._place_name(leg.get("to")),
+            "geometry_points": points,
+        }
+
+    @staticmethod
+    def _optional_text(value):
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        return None
+
+    @classmethod
+    def _place_name(cls, place):
+        if isinstance(place, dict):
+            return cls._optional_text(place.get("name"))
+        return None
 
     @classmethod
     def _sum_leg_distances(cls, legs: list) -> float:
@@ -433,6 +492,31 @@ class TravelResult:
             estimated_arrival=arrival.isoformat(),
             feasibility=self._feasibility,
         )
+
+        if isinstance(self._legs, list):
+            result["legs"] = []
+            for leg in self._legs:
+                if not isinstance(leg, dict):
+                    continue
+                mode = leg.get("mode")
+                if mode not in ("WALK", "BUS", "SUBWAY", "RAIL", "TRAM", "FERRY"):
+                    mode = None
+                detail = {"mode": mode}
+                for key in ("distance_km", "duration_minutes"):
+                    value = leg.get(key)
+                    if not isinstance(value, (int, float)) or isinstance(value, bool):
+                        value = None
+                    else:
+                        try:
+                            self._validate_number(value, key, allow_zero=True)
+                        except ValidationError:
+                            value = None
+                    detail[key] = value
+                for key in ("route", "from_name", "to_name"):
+                    value = leg.get(key)
+                    detail[key] = value.strip() if isinstance(value, str) and value.strip() else None
+                detail["geometry"] = decode_route_geometry(leg.get("geometry_points"))
+                result["legs"].append(detail)
 
         if self._event_start is not None:
             event_start = self._to_singapore_datetime(self._event_start, "Event start")

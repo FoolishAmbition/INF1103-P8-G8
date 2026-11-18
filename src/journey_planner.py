@@ -101,6 +101,7 @@ class JourneyPlanner:
             provider=route.provider,
             event_start=event_start,
             preferred_limit_minutes=self.preferred_limit_minutes,
+            legs=getattr(route, "legs", None),
         )
 
     @staticmethod

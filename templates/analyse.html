@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>EventWise | Make time for what matters</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script defer src="{{ url_for('static', filename='js/route_map.js') }}"></script>
   <script defer src="{{ url_for('static', filename='js/script.js') }}"></script>
 </head>
 <body>
@@ -19,6 +22,10 @@
           <input id="event-name" name="event_name" placeholder="e.g. Future of AI Workshop" maxlength="150" required>
           <label for="event-description">What's it about?</label>
           <textarea id="event-description" name="event_description" placeholder="Tell us a little about the event..." maxlength="2000" rows="4" required></textarea>
+          <label for="venue-name">Venue name <span class="geo-optional">(optional)</span></label>
+          <input id="venue-name" name="venue_name" type="text" placeholder="e.g. Campus auditorium">
+          <label for="venue-address">Venue address <span class="geo-optional">(optional)</span></label>
+          <input id="venue-address" name="venue_address" type="text" placeholder="Street address or meeting location">
           <div class="field-title">How's your workload?</div>
           <div class="workload-options" role="radiogroup" aria-label="Current workload">
             <label class="workload-option"><input type="radio" name="workload" value="Low" checked><span>  Low</span></label>
@@ -55,10 +62,6 @@
           <div id="result-empty" class="result-empty"><span class="result-doodle">✧</span><p>Your personalised recommendation will appear here.</p></div>
           <div id="result-data" hidden><div class="result-head"><span id="result-badge" class="result-badge"></span><strong id="result-score"></strong></div><p id="result-reason"></p><div class="score-grid"><div>Career <b id="score-career">—</b></div><div>Learning <b id="score-learning">—</b></div><div>Networking <b id="score-networking">—</b></div></div><p class="ai-reason" id="ai-reason"></p></div>
         </section>
-        <section id="geo-travel-result" class="geo-travel-result" aria-label="Travel estimate" aria-live="polite" hidden>
-          <h3>✦ Your journey estimate</h3>
-          <div id="geo-travel-content"></div>
-        </section>
         <p id="form-message" class="message" role="status" aria-live="polite"></p>
       </section>
       <section class="panel right-panel" aria-label="History and profile">
@@ -68,6 +71,19 @@
         <div class="panel-footer"><span class="frog" aria-hidden="true">☘</span></div>
       </section>
     </div>
+    <section id="geo-travel-result" class="geo-travel-result" aria-label="Travel estimate" hidden>
+      <h3>Your journey</h3>
+      <div id="geo-travel-content" aria-live="polite"></div>
+      <div class="geo-journey-layout">
+        <div id="geo-steps-content"></div>
+        <section id="geo-map-section" aria-label="Current journey map" hidden>
+          <div class="geo-map-heading"><h4>Explore your route</h4><button id="geo-show-all" type="button">Show whole journey</button></div>
+          <p id="geo-map-message" class="geo-hint" role="status"></p>
+          <div id="geo-route-map" class="geo-route-map" aria-label="Interactive OneMap journey map"></div>
+          <p class="geo-map-legend">Numbers match the steps. Dashed lines mean walking; solid lines mean transit.</p>
+        </section>
+      </div>
+    </section>
     <div class="bottom-caption">✳ Built for curious students · Powered by EventWise AI ✳</div>
   </main>
 </body>
